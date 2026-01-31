@@ -1,5 +1,6 @@
 import type { Argv } from "yargs"
 import { AgentCommands } from "./agent"
+import { ServeCommand } from "./serve"
 import { StatusCommand } from "./status"
 import { TaskCommands } from "./task"
 
@@ -9,6 +10,7 @@ export namespace HydraCLI {
       .command("task", "Manage tasks", TaskCommands.register)
       .command("agent", "Manage agents", AgentCommands.register)
       .command("status", "Show overall status", (yargs: Argv) => yargs, StatusCommand.handler)
+      .command("serve", "Run Hydra MCP server (stdio)", (yargs: Argv) => yargs, ServeCommand.handler)
       .demandCommand(1, "Please specify a command")
   }
 }
