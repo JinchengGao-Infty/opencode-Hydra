@@ -3,6 +3,7 @@ import fs from "fs/promises"
 import path from "node:path"
 import { Instance } from "../../project/instance"
 import { Worktree } from "../../worktree"
+import { HydraBus, HydraEvent } from "../event"
 import { TaskManager, type Task } from "../task"
 import { AgentClass } from "./class"
 import { AgentInstance } from "./instance"
@@ -43,6 +44,14 @@ export namespace AgentManager {
     })
 
     instances.set(agent.id, agent)
+
+    HydraBus.emit(HydraEvent.AgentSpawned, {
+      agentId: agent.id,
+      class: agent.class,
+      name: agent.name,
+      worktree: agent.worktree,
+    })
+
     return agent
   }
 
@@ -90,6 +99,11 @@ export namespace AgentManager {
       }),
     )
 
+    HydraBus.emit(HydraEvent.AgentStarted, {
+      agentId,
+      taskId: agent.taskId,
+    })
+
     void watchProcess(agentId, proc).catch(() => undefined)
   }
 
@@ -104,6 +118,12 @@ export namespace AgentManager {
     const text = message.endsWith("\n") ? message : message + "\n"
     proc.stdin.write(text)
     proc.stdin.flush()
+
+    HydraBus.emit(HydraEvent.AgentMessage, {
+      agentId,
+      message,
+      from: "master",
+    })
   }
 
   export async function pause(agentId: string): Promise<void> {
@@ -111,6 +131,10 @@ export namespace AgentManager {
     if (!proc) throw new Error(`AgentManager.pause: process not found: ${agentId}`)
     proc.kill("SIGSTOP")
     updateStatus(agentId, "paused")
+
+    HydraBus.emit(HydraEvent.AgentPaused, {
+      agentId,
+    })
   }
 
   export async function resume(agentId: string): Promise<void> {
@@ -118,11 +142,20 @@ export namespace AgentManager {
     if (!proc) throw new Error(`AgentManager.resume: process not found: ${agentId}`)
     proc.kill("SIGCONT")
     updateStatus(agentId, "running")
+
+    HydraBus.emit(HydraEvent.AgentResumed, {
+      agentId,
+    })
   }
 
   export async function kill(agentId: string, options?: { cleanup?: boolean }): Promise<void> {
     const agent = get(agentId)
     if (!agent) throw new Error(`AgentManager.kill: agent not found: ${agentId}`)
+
+    HydraBus.emit(HydraEvent.AgentKilled, {
+      agentId,
+      reason: "SIGTERM",
+    })
 
     const proc = processes.get(agentId)
     const code = await (async () => {
@@ -272,9 +305,28 @@ async function watchProcess(agentId: string, proc: Subprocess): Promise<void> {
   const decoder = new TextDecoder()
 
   const update = (text: string) => {
-    if (text.includes("WAITING") || text.includes("⚠️")) AgentManager.updateStatus(agentId, "waiting")
-    if (text.includes("DONE") || text.includes("✅")) AgentManager.updateStatus(agentId, "done")
-    if (text.includes("FAILED")) AgentManager.updateStatus(agentId, "failed")
+    if (text.includes("WAITING") || text.includes("⚠️")) {
+      if (AgentManager.get(agentId)?.status !== "waiting") {
+        AgentManager.updateStatus(agentId, "waiting")
+        HydraBus.emit(HydraEvent.AgentWaiting, {
+          agentId,
+          taskId: agent.taskId,
+          reason: text.trim() || "waiting",
+        })
+      }
+    }
+
+    if (text.includes("DONE") || text.includes("✅")) {
+      if (AgentManager.get(agentId)?.status !== "done") {
+        AgentManager.updateStatus(agentId, "done")
+      }
+    }
+
+    if (text.includes("FAILED")) {
+      if (AgentManager.get(agentId)?.status !== "failed") {
+        AgentManager.updateStatus(agentId, "failed")
+      }
+    }
   }
 
   const pump = async (stream: ReadableStream<Uint8Array> | null) => {
@@ -291,9 +343,26 @@ async function watchProcess(agentId: string, proc: Subprocess): Promise<void> {
   const code = await proc.exited.catch(() => undefined)
   await Promise.all([out, err])
 
-  if (AgentManager.get(agentId)?.pid === proc.pid) {
-    if (code !== undefined) AgentManager.updateStatus(agentId, code === 0 ? "done" : "failed")
+  const current = AgentManager.get(agentId)
+  if (!current) return
+  if (current.pid !== proc.pid) return
+  if (code === undefined) return
+
+  AgentManager.updateStatus(agentId, code === 0 ? "done" : "failed")
+
+  if (code === 0) {
+    HydraBus.emit(HydraEvent.AgentCompleted, {
+      agentId,
+      taskId: current.taskId,
+    })
+    return
   }
+
+  HydraBus.emit(HydraEvent.AgentFailed, {
+    agentId,
+    taskId: current.taskId,
+    error: `Exit code ${code}`,
+  })
 }
 
 async function removeWorktree(worktree: string) {
