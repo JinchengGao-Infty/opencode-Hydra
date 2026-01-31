@@ -105,6 +105,19 @@ This is used internally and can be invoked using `@general` in messages.
 
 Learn more about [agents](https://opencode.ai/docs/agents).
 
+### Hydra (Multi-Agent Orchestration)
+
+Hydra is OpenCode's experimental multi-agent orchestration system.
+
+```bash
+opencode hydra task create "Implement login" --class Coder --allow "src/auth/**" --description "..."
+opencode hydra task list
+opencode hydra agent spawn Coder --task <task-id>
+opencode hydra status
+```
+
+See `docs/hydra/README.md` for details.
+
 ### Documentation
 
 For more info on how to configure OpenCode [**head over to our docs**](https://opencode.ai/docs).
