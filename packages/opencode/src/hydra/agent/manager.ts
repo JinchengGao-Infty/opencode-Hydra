@@ -113,7 +113,13 @@ export namespace AgentManager {
     void watchProcess(agentId, proc).catch(() => undefined)
   }
 
-  export async function send(agentId: string, message: string): Promise<void> {
+  export async function send(
+    agentId: string,
+    message: string,
+    options?: {
+      from?: "user" | "master"
+    },
+  ): Promise<void> {
     const proc = processes.get(agentId)
     if (!proc) throw new Error(`AgentManager.send: process not found: ${agentId}`)
     if (!proc.stdin) throw new Error(`AgentManager.send: process stdin not available: ${agentId}`)
@@ -128,7 +134,7 @@ export namespace AgentManager {
     HydraBus.emit(HydraEvent.AgentMessage, {
       agentId,
       message,
-      from: "master",
+      from: options?.from ?? "master",
     })
   }
 
@@ -335,17 +341,22 @@ async function watchProcess(agentId: string, proc: Subprocess): Promise<void> {
     }
   }
 
-  const pump = async (stream: ReadableStream<Uint8Array> | null) => {
+  const pump = async (stream: ReadableStream<Uint8Array> | null, source: "stdout" | "stderr") => {
     if (!stream) return
     for await (const chunk of stream) {
       const text = decoder.decode(chunk)
       await fs.appendFile(file, text)
       update(text)
+      HydraBus.emit(HydraEvent.AgentOutput, {
+        agentId,
+        text,
+        stream: source,
+      })
     }
   }
 
-  const out = pump(proc.stdout)
-  const err = pump(proc.stderr)
+  const out = pump(proc.stdout, "stdout")
+  const err = pump(proc.stderr, "stderr")
   const code = await proc.exited.catch(() => undefined)
   await Promise.all([out, err])
 

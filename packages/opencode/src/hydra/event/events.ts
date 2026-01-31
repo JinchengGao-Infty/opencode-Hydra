@@ -115,6 +115,15 @@ export namespace HydraEvent {
     }),
   )
 
+  export const AgentOutput = define(
+    "hydra.agent.output",
+    z.object({
+      agentId: z.string(),
+      text: z.string(),
+      stream: z.enum(["stdout", "stderr"]).optional(),
+    }),
+  )
+
   export const AgentCompleted = define(
     "hydra.agent.completed",
     z.object({
@@ -141,4 +150,3 @@ export namespace HydraEvent {
     }),
   )
 }
-

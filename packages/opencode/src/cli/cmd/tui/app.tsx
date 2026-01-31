@@ -22,6 +22,7 @@ import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
+import { Hydra } from "@tui/routes/hydra"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -220,6 +221,11 @@ function App() {
       return
     }
 
+    if (route.data.type === "hydra") {
+      renderer.setTerminalTitle("OC | Hydra")
+      return
+    }
+
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
       if (!session || SessionApi.isDefaultTitle(session.title)) {
@@ -314,6 +320,18 @@ function App() {
           type: "home",
           initialPrompt: currentPrompt,
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Hydra",
+      value: "hydra.open",
+      category: "Hydra",
+      slash: {
+        name: "hydra",
+      },
+      onSelect: () => {
+        route.navigate({ type: "hydra" })
         dialog.clear()
       },
     },
@@ -679,6 +697,9 @@ function App() {
       <Switch>
         <Match when={route.data.type === "home"}>
           <Home />
+        </Match>
+        <Match when={route.data.type === "hydra"}>
+          <Hydra />
         </Match>
         <Match when={route.data.type === "session"}>
           <Session />

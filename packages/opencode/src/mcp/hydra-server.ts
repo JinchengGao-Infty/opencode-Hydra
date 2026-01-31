@@ -180,7 +180,7 @@ export async function createHydraServer(input?: { root?: string }) {
         taskId: args.task,
       })
 
-      if (args.prompt) await AgentManager.send(agent.id, args.prompt)
+      if (args.prompt) await AgentManager.send(agent.id, args.prompt, { from: "user" })
       return json(agent)
     },
   )
@@ -192,7 +192,7 @@ export async function createHydraServer(input?: { root?: string }) {
       inputSchema: z.object({ id: z.string(), message: z.string() }).strict(),
     },
     async (args) => {
-      await AgentManager.send(args.id, args.message)
+      await AgentManager.send(args.id, args.message, { from: "user" })
       return ok()
     },
   )
@@ -264,4 +264,3 @@ export async function createHydraServer(input?: { root?: string }) {
 
   return server
 }
-
