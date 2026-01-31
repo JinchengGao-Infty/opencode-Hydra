@@ -7,6 +7,7 @@ import { HydraBus, HydraEvent } from "../event"
 import { TaskManager, type Task } from "../task"
 import { AgentClass } from "./class"
 import { AgentInstance } from "./instance"
+import { HydraConfig } from "../config"
 
 export namespace AgentManager {
   const instances = new Map<string, AgentInstance.Info>()
@@ -86,11 +87,13 @@ export namespace AgentManager {
     const klass = await AgentClass.get(projectRoot, agent.class)
     if (!klass) throw new Error(`AgentManager.start: class not found: ${agent.class}`)
 
+    const loaded = HydraConfig.load(projectRoot)
+
     await fs.mkdir(path.join(agent.worktree, ".hydra"), { recursive: true })
     await ensureLogfile(agent.worktree)
 
     const prompt = buildPrompt(klass, task, agent.worktree)
-    const proc = await startOpenCodeProcess(agentId, agent.worktree, agent.model, agent.thinking, prompt)
+    const proc = await startOpenCodeProcess(agentId, agent.worktree, agent.model, agent.thinking, prompt, opencodeEnv(loaded.providers))
 
     processes.set(agentId, proc)
 
@@ -287,6 +290,7 @@ async function startOpenCodeProcess(
   model: string,
   thinking: string,
   prompt: string,
+  env?: Record<string, string>,
 ): Promise<Subprocess> {
   const bin = process.env["HYDRA_OPENCODE_BIN"]?.trim() || Bun.which("opencode")
   if (!bin) throw new Error("AgentManager.start: opencode binary not found in PATH")
@@ -301,11 +305,31 @@ async function startOpenCodeProcess(
       env: {
         ...process.env,
         HYDRA_AGENT_ID: agentId,
+        ...(env ?? {}),
       },
     },
   )
 
   return proc
+}
+
+function opencodeEnv(providers: HydraConfig.Config["providers"]): Record<string, string> | undefined {
+  const map: Record<string, { options: Record<string, string> }> = {}
+
+  for (const entry of Object.entries(providers)) {
+    const name = entry[0]
+    const val = entry[1]
+
+    const opts: Record<string, string> = {}
+    if (val.endpoint) opts.baseURL = val.endpoint
+    if (val.apiKey) opts.apiKey = val.apiKey
+    if (Object.keys(opts).length === 0) continue
+
+    map[name] = { options: opts }
+  }
+
+  if (Object.keys(map).length === 0) return
+  return { OPENCODE_CONFIG_CONTENT: JSON.stringify({ provider: map }) }
 }
 
 async function watchProcess(agentId: string, proc: Subprocess): Promise<void> {

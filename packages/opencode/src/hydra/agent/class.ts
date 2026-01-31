@@ -1,6 +1,7 @@
 import z from "zod"
 import path from "node:path"
 import yaml from "yaml"
+import { HydraConfig } from "../config"
 
 import PROMPT_CODER from "./prompts/coder.txt"
 import PROMPT_ARCHITECT from "./prompts/architect.txt"
@@ -51,6 +52,41 @@ export namespace AgentClass {
     },
   }
 
+  let classes: Record<string, Info> = BUILTIN
+
+  export function register(custom?: Record<string, HydraConfig.Class>, defaults?: HydraConfig.Config["defaults"]): void {
+    const defs = defaults ?? { model: "anthropic/claude-sonnet", thinking: "medium" as const, timeout: 3600, maxAgents: 3 }
+    const out: Record<string, Info> = { ...BUILTIN }
+
+    for (const entry of Object.entries(custom ?? {})) {
+      const name = entry[0]
+      const cfg = entry[1]
+      const base = BUILTIN[name]
+      const replace = !base || Boolean(cfg.description)
+
+      if (!replace) {
+        const prompt = cfg.prompt ? [base.prompt, cfg.prompt].join("\n\n") : base.prompt
+        out[name] = Info.parse({
+          ...base,
+          prompt,
+          defaultModel: cfg.model ?? base.defaultModel,
+          defaultThinking: cfg.thinking ?? base.defaultThinking,
+        })
+        continue
+      }
+
+      out[name] = Info.parse({
+        name,
+        description: cfg.description ?? base?.description ?? name,
+        prompt: cfg.prompt ?? base?.prompt ?? "",
+        defaultModel: cfg.model ?? base?.defaultModel ?? defs.model,
+        defaultThinking: cfg.thinking ?? base?.defaultThinking ?? defs.thinking,
+      })
+    }
+
+    classes = out
+  }
+
   const Config = z.object({
     classes: z.record(
       z.string(),
@@ -88,18 +124,15 @@ export namespace AgentClass {
   }
 
   export async function list(projectRoot: string): Promise<Info[]> {
-    const custom = await loadCustom(projectRoot)
-    return Object.values({
-      ...BUILTIN,
-      ...custom,
-    })
+    const cfg = HydraConfig.load(projectRoot)
+    register(cfg.classes, cfg.defaults)
+    return Object.values(classes)
   }
 
   export async function get(projectRoot: string, name: string): Promise<Info | undefined> {
-    const custom = await loadCustom(projectRoot)
-    const found = custom[name]
-    if (found) return found
-    return BUILTIN[name]
+    const cfg = HydraConfig.load(projectRoot)
+    register(cfg.classes, cfg.defaults)
+    return classes[name]
   }
 
   export async function exists(projectRoot: string, name: string): Promise<boolean> {
