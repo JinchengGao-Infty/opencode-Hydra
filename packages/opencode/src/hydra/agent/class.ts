@@ -1,0 +1,109 @@
+import z from "zod"
+import path from "node:path"
+import yaml from "yaml"
+
+import PROMPT_CODER from "./prompts/coder.txt"
+import PROMPT_ARCHITECT from "./prompts/architect.txt"
+import PROMPT_WRITER from "./prompts/writer.txt"
+import PROMPT_REVIEWER from "./prompts/reviewer.txt"
+
+export namespace AgentClass {
+  export const Thinking = z.enum(["low", "medium", "high"])
+  export type Thinking = z.infer<typeof Thinking>
+
+  export const Info = z.object({
+    name: z.string(),
+    description: z.string(),
+    prompt: z.string(),
+    defaultModel: z.string(),
+    defaultThinking: Thinking,
+  })
+  export type Info = z.infer<typeof Info>
+
+  export const BUILTIN: Record<string, Info> = {
+    Coder: {
+      name: "Coder",
+      description: "写代码的 Agent，擅长实现功能、修复 bug、写测试",
+      prompt: PROMPT_CODER,
+      defaultModel: "anthropic/claude-sonnet",
+      defaultThinking: "medium",
+    },
+    Architect: {
+      name: "Architect",
+      description: "架构设计 Agent，擅长系统设计、技术选型、代码审查",
+      prompt: PROMPT_ARCHITECT,
+      defaultModel: "anthropic/claude-opus",
+      defaultThinking: "high",
+    },
+    Writer: {
+      name: "Writer",
+      description: "文档 Agent，擅长写文档、注释、README",
+      prompt: PROMPT_WRITER,
+      defaultModel: "google/gemini-2",
+      defaultThinking: "low",
+    },
+    Reviewer: {
+      name: "Reviewer",
+      description: "代码审查 Agent，擅长发现问题、提出改进建议",
+      prompt: PROMPT_REVIEWER,
+      defaultModel: "anthropic/claude-opus",
+      defaultThinking: "high",
+    },
+  }
+
+  const Config = z.object({
+    classes: z.record(
+      z.string(),
+      z.object({
+        description: z.string(),
+        prompt: z.string(),
+        defaultModel: z.string(),
+        defaultThinking: Thinking,
+      }),
+    ),
+  })
+
+  export async function loadCustom(projectRoot: string): Promise<Record<string, Info>> {
+    const file = path.join(projectRoot, ".hydra/agents.yaml")
+    const ok = await Bun.file(file).exists()
+    if (!ok) return {}
+
+    const text = await Bun.file(file).text()
+    const parsed = Config.parse(yaml.parse(text))
+
+    const out: Record<string, Info> = {}
+    for (const entry of Object.entries(parsed.classes)) {
+      const name = entry[0]
+      const val = entry[1]
+      out[name] = Info.parse({
+        name,
+        description: val.description,
+        prompt: val.prompt,
+        defaultModel: val.defaultModel,
+        defaultThinking: val.defaultThinking,
+      })
+    }
+
+    return out
+  }
+
+  export async function list(projectRoot: string): Promise<Info[]> {
+    const custom = await loadCustom(projectRoot)
+    return Object.values({
+      ...BUILTIN,
+      ...custom,
+    })
+  }
+
+  export async function get(projectRoot: string, name: string): Promise<Info | undefined> {
+    const custom = await loadCustom(projectRoot)
+    const found = custom[name]
+    if (found) return found
+    return BUILTIN[name]
+  }
+
+  export async function exists(projectRoot: string, name: string): Promise<boolean> {
+    const info = await get(projectRoot, name)
+    return Boolean(info)
+  }
+}
