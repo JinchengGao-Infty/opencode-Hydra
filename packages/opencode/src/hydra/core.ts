@@ -232,8 +232,6 @@ export namespace HydraCore {
         taskId: task.meta.id,
         agentId: agent.id,
       })
-
-      await AgentManager.start(cfg.projectRoot, agent.id)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
 

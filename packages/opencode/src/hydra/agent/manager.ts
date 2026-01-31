@@ -52,6 +52,12 @@ export namespace AgentManager {
       worktree: agent.worktree,
     })
 
+    if (input.taskId) {
+      await start(projectRoot, agent.id)
+      const started = get(agent.id)
+      if (started) return started
+    }
+
     return agent
   }
 

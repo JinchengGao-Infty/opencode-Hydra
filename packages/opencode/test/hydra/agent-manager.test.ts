@@ -37,7 +37,6 @@ describe("Hydra AgentManager", () => {
     })
 
     const agent = await AgentManager.spawn(tmp.path, { class: "Coder", taskId: task.meta.id })
-    await AgentManager.start(tmp.path, agent.id)
     expect(AgentManager.get(agent.id)?.pid).toBeNumber()
 
     await AgentManager.send(agent.id, "wait")
