@@ -1,6 +1,7 @@
 import { AgentClass, AgentManager } from "./agent"
 import { HydraBus, HydraEvent } from "./event"
 import { TaskManager, type Task } from "./task"
+import { HydraConfig } from "./config"
 
 export namespace HydraCore {
   export interface Config {
@@ -25,15 +26,20 @@ export namespace HydraCore {
   export async function init(projectRoot: string, options?: Partial<Config>): Promise<void> {
     await stop()
 
+    const loaded = HydraConfig.load(projectRoot)
+    AgentClass.register(loaded.classes, loaded.defaults)
+
     config = {
       projectRoot,
-      maxAgents: options?.maxAgents ?? DEFAULT.maxAgents,
+      maxAgents: options?.maxAgents ?? loaded.defaults.maxAgents ?? DEFAULT.maxAgents,
       pollInterval: options?.pollInterval ?? DEFAULT.pollInterval,
-      defaultTimeout: options?.defaultTimeout ?? DEFAULT.defaultTimeout,
+      defaultTimeout: options?.defaultTimeout ?? loaded.defaults.timeout ?? DEFAULT.defaultTimeout,
     }
 
     await TaskManager.init(projectRoot)
     setup()
+
+    if (loaded.scheduler.autoStart) await start()
   }
 
   export async function start(): Promise<void> {
