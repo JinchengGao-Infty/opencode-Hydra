@@ -4,6 +4,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
 import {
   CallToolResultSchema,
   type Tool as MCPToolDef,
@@ -23,6 +24,7 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
+import { createHydraServer } from "./hydra-server"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -160,6 +162,27 @@ export namespace MCP {
     return typeof entry === "object" && entry !== null && "type" in entry
   }
 
+  function isMcpToggle(entry: McpEntry): entry is { enabled: boolean } {
+    return typeof entry === "object" && entry !== null && "enabled" in entry && !("type" in entry)
+  }
+
+  const builtin = {
+    hydra: async (root: string) => {
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+      const server = await createHydraServer({ root })
+      await server.connect(serverTransport)
+
+      const client = new Client({
+        name: "opencode",
+        version: Installation.VERSION,
+      })
+      await client.connect(clientTransport)
+      registerNotificationHandlers(client, "hydra")
+
+      return client
+    },
+  } as const
+
   const state = Instance.state(
     async () => {
       const cfg = await Config.get()
@@ -169,6 +192,11 @@ export namespace MCP {
 
       await Promise.all(
         Object.entries(config).map(async ([key, mcp]) => {
+          if (!isMcpConfigured(mcp) && isMcpToggle(mcp)) {
+            if (mcp.enabled === false) status[key] = { status: "disabled" }
+            return
+          }
+
           if (!isMcpConfigured(mcp)) {
             log.error("Ignoring MCP config entry without type", { key })
             return
@@ -190,6 +218,39 @@ export namespace MCP {
           }
         }),
       )
+
+      for (const entry of Object.entries(builtin)) {
+        const key = entry[0]
+        const fn = entry[1]
+
+        if (status[key]) continue
+
+        const mcp = config[key]
+        if (mcp && isMcpToggle(mcp) && mcp.enabled === false) {
+          status[key] = { status: "disabled" }
+          continue
+        }
+
+        if (mcp && isMcpConfigured(mcp)) continue
+
+        const client = await fn(Instance.directory).catch((error) => {
+          log.error("builtin mcp startup failed", { key, error: error instanceof Error ? error.message : String(error) })
+          status[key] = { status: "failed", error: error instanceof Error ? error.message : String(error) }
+          return
+        })
+        if (!client) continue
+
+        const tools = await client.listTools().catch((error) => {
+          log.error("failed to get tools from builtin mcp", { key, error: error instanceof Error ? error.message : String(error) })
+          status[key] = { status: "failed", error: error instanceof Error ? error.message : String(error) }
+          return
+        })
+        if (!tools) continue
+
+        clients[key] = client
+        status[key] = { status: "connected" }
+      }
+
       return {
         status,
         clients,
@@ -505,6 +566,10 @@ export namespace MCP {
       result[key] = s.status[key] ?? { status: "disabled" }
     }
 
+    for (const key of Object.keys(builtin)) {
+      result[key] = s.status[key] ?? { status: "disabled" }
+    }
+
     return result
   }
 
@@ -596,7 +661,11 @@ export namespace MCP {
       for (const mcpTool of toolsResult.tools) {
         const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
         const sanitizedToolName = mcpTool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-        result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client, timeout)
+        const key =
+          clientName === "hydra" && sanitizedToolName.startsWith("hydra_")
+            ? sanitizedToolName
+            : sanitizedClientName + "_" + sanitizedToolName
+        result[key] = await convertMcpTool(mcpTool, client, timeout)
       }
     }
     return result
