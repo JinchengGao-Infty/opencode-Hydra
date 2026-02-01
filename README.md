@@ -8,10 +8,19 @@
 - 上游项目地址（保留）：
   - GitHub：https://github.com/anomalyco/opencode
   - 官网/文档：https://opencode.ai
-- Hydra 不是一个独立发布的开源项目：你无需“先了解 Hydra 再使用”，只需要把它当作本 fork 内置的“多 Agent 任务调度层”。
+- Hydra 不是一个独立发布的开源项目：你无需“先了解 Hydra 再使用”，只需要把它当作本 fork 内置的“多 Agent 任务调度层”,Hydra的前身是本人另一个仓库里面的agent-mux.
 
-## Hydra 是什么（给没接触过的人）
+## Hydra 是什么?(讲故事版本)
 
+我曾想过单独线性的使用claude code或者codex这种CLI,那遇到并行的任务岂不是太慢了吗?我遇到的任务,经常会遇到5-10并行的时候,比如我需要把某个算法适配到十个数据集上,并且跑通smoke test,如果我为每一个并行的任务单独开一个claude code,那我很快就会乱掉,为什么不能让AI去分配任务给别的AI,然后收集进度合并呢?因此我开始了一系列的尝试,一开始我为claude code写了一个MCP,调用codex,但是没有可视化,众所周知,codex GPT-5.2 xhigh又很慢,这就造成了幽灵AI的现象,即codex带着我的任务潜入赛博空间,直到完成,但是在这个过程中,我无法看到他,无法控制他,无法纠正他.
+
+agent-mux,是我的第二个版本,利用tmux可视化,这个版本很不错,但是我又发现了一个问题,我派遣多个AI的时候,他们会互相打架,codex1改完一个文件,codex2发现自己的任务不兼容了,又会改回去.
+
+于是我想到用gitworktree去隔离,于是Hydra诞生了.给每个子AI文件修改权限,用worktree隔离,主控AI依次审查合并.
+
+但是Hydra只是claude code的MCP,并且依赖tmux,这对Windows用户很不友好,并且我也有抛弃claude code这种闭源工具的想法,做一款真正的AI-IDE.直到我找到了opencode,我将给予这伟大的开源项目最高的赞美.opencode-Hydra,已经是我理想中的AI-IDE的样子了,只是目前只有TUI,没有适配UI界面.但这也足够了.
+
+## Hydra 是什么?(专业版本)
 Hydra 用来把一个大目标拆成可并行的小任务，并为每个任务拉起一个子 Agent 执行。你可以把它理解为三个概念：
 
 - `task`：要做什么（可带 allowlist/描述）
@@ -53,8 +62,6 @@ OpenCode（主控）：
 Hydra（子 Agent 与调度）：
 - 全局：`~/.config/opencode/hydra.yaml`
 - 项目级（优先级更高）：`./.hydra/config.yaml`
-
-> 不要把任何 `apiKey` 提交到 Git。建议只写在本机的 `~/.config` 下。
 
 ## TUI：怎么“像标签页一样”用
 
