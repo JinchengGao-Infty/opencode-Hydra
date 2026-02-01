@@ -369,6 +369,23 @@ async function watchProcess(agentId: string, proc: Proc): Promise<void> {
   const file = logPath(agent.worktree)
   const decoder = new TextDecoder()
 
+  const gate = { closed: false }
+
+  const close = () => {
+    if (gate.closed) return
+    gate.closed = true
+    const stdin = proc.stdin
+    if (!stdin) return
+    if (typeof stdin === "number") return
+    stdin.end()
+  }
+
+  const stop = () => {
+    if (gate.closed) return
+    gate.closed = true
+    proc.kill("SIGTERM")
+  }
+
   const update = (text: string) => {
     if (text.includes("WAITING") || text.includes("⚠️")) {
       if (AgentManager.get(agentId)?.status !== "waiting") {
@@ -385,12 +402,14 @@ async function watchProcess(agentId: string, proc: Proc): Promise<void> {
       if (AgentManager.get(agentId)?.status !== "done") {
         AgentManager.updateStatus(agentId, "done")
       }
+      close()
     }
 
     if (text.includes("FAILED")) {
       if (AgentManager.get(agentId)?.status !== "failed") {
         AgentManager.updateStatus(agentId, "failed")
       }
+      stop()
     }
   }
 

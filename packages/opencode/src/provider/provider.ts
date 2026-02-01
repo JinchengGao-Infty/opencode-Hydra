@@ -1071,13 +1071,21 @@ export namespace Provider {
     }
 
     const info = provider.models[modelID]
-    if (!info) {
+    if (info) return info
+
+    const query = modelID.trim()
+    if (query) {
+      const list = Object.values(provider.models).filter((x) => x.id.includes(query))
+      const [best] = sort(list)
+      if (best) return best
+    }
+
+    {
       const availableModels = Object.keys(provider.models)
       const matches = fuzzysort.go(modelID, availableModels, { limit: 3, threshold: -10000 })
       const suggestions = matches.map((m) => m.target)
       throw new ModelNotFoundError({ providerID, modelID, suggestions })
     }
-    return info
   }
 
   export async function getLanguage(model: Model): Promise<LanguageModelV2> {
@@ -1191,10 +1199,28 @@ export namespace Provider {
   }
 
   export function parseModel(model: string) {
-    const [providerID, ...rest] = model.split("/")
+    const text = model.trim()
+    const hasSlash = text.includes("/")
+    if (hasSlash) {
+      const [providerID, ...rest] = text.split("/")
+      return {
+        providerID: providerID,
+        modelID: rest.join("/"),
+      }
+    }
+
+    const providerID = iife(() => {
+      if (text.startsWith("claude-")) return "anthropic"
+      if (text.startsWith("gpt-")) return "openai"
+      if (text.startsWith("gemini-")) return "google"
+      if (text.startsWith("o1")) return "openai"
+      if (text.startsWith("o3")) return "openai"
+      if (text.startsWith("o4")) return "openai"
+      return text
+    })
     return {
       providerID: providerID,
-      modelID: rest.join("/"),
+      modelID: providerID === text ? "" : text,
     }
   }
 

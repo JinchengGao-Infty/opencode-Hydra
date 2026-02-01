@@ -11,6 +11,7 @@ import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
+import readline from "node:readline"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -91,8 +92,14 @@ export const RunCommand = cmd({
         type: "string",
         describe: "model variant (provider-specific reasoning effort, e.g., high, max, minimal)",
       })
+      .option("unattended", {
+        type: "boolean",
+        describe: "keep the process alive and accept additional prompts over stdin (one prompt per line)",
+        default: false,
+      })
   },
   handler: async (args) => {
+    const unattended = Boolean(args.unattended)
     let message = [...args.message, ...(args["--"] || [])]
       .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
       .join(" ")
@@ -126,14 +133,14 @@ export const RunCommand = cmd({
       }
     }
 
-    if (!process.stdin.isTTY) message += "\n" + (await Bun.stdin.text())
+    if (!process.stdin.isTTY && !unattended) message += "\n" + (await Bun.stdin.text())
 
     if (message.trim().length === 0 && !args.command) {
       UI.error("You must provide a message or a command")
       process.exit(1)
     }
 
-    const execute = async (sdk: OpencodeClient, sessionID: string) => {
+    const execute = async (sdk: OpencodeClient, sessionID: string, text: string) => {
       const printEvent = (color: string, type: string, title: string) => {
         UI.println(
           color + `|`,
@@ -209,6 +216,14 @@ export const RunCommand = cmd({
           if (event.type === "permission.asked") {
             const permission = event.properties
             if (permission.sessionID !== sessionID) continue
+            if (unattended || !process.stdin.isTTY) {
+              await sdk.permission.respond({
+                sessionID,
+                permissionID: permission.id,
+                response: "reject",
+              })
+              continue
+            }
             const result = await select({
               message: `Permission required: ${permission.permission} (${permission.patterns.join(", ")})`,
               options: [
@@ -257,7 +272,7 @@ export const RunCommand = cmd({
           agent: resolvedAgent,
           model: args.model,
           command: args.command,
-          arguments: message,
+          arguments: text,
           variant: args.variant,
         })
       } else {
@@ -267,12 +282,30 @@ export const RunCommand = cmd({
           agent: resolvedAgent,
           model: modelParam,
           variant: args.variant,
-          parts: [...fileParts, { type: "text", text: message }],
+          parts: [...fileParts, { type: "text", text }],
         })
       }
 
       await eventProcessor
       if (errorMsg) process.exit(1)
+    }
+
+    const loop = async (sdk: OpencodeClient, sessionID: string) => {
+      const initial = message.trim().length > 0 || args.command
+      if (initial) await execute(sdk, sessionID, message)
+
+      if (!unattended) return
+
+      const input = readline.createInterface({
+        input: process.stdin,
+        crlfDelay: Infinity,
+      })
+
+      for await (const line of input) {
+        const next = line.trimEnd()
+        if (!next) continue
+        await execute(sdk, sessionID, next)
+      }
     }
 
     if (args.attach) {
@@ -335,7 +368,7 @@ export const RunCommand = cmd({
         }
       }
 
-      return await execute(sdk, sessionID)
+      return await loop(sdk, sessionID)
     }
 
     await bootstrap(process.cwd(), async () => {
@@ -389,7 +422,7 @@ export const RunCommand = cmd({
         }
       }
 
-      await execute(sdk, sessionID)
+      await loop(sdk, sessionID)
     })
   },
 })
