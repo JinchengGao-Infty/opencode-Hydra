@@ -80,7 +80,7 @@ Hydra 任务是标准 Markdown 文件，示例：
 - status: pending
 - agentClass: Coder
 - model: anthropic/claude-sonnet
-- thinking: medium
+- thinking: xhigh
 - allow: src/**, test/**
 - timeout: 3600
 - depends: t000

@@ -41,7 +41,7 @@
 - `class?`: `string`（AgentClass 名称，如 `Coder` / `Codex`）
 - `allow?`: `string[]`（默认 `[]`，允许修改的文件 glob）
 - `model?`: `string`（覆盖 AgentClass 默认模型，如 `anthropic/claude-sonnet`）
-- `thinking?`: `"low" | "medium" | "high"`（覆盖默认思考级别）
+- `thinking?`: `"low" | "medium" | "high" | "xhigh"`（覆盖默认思考级别；`xhigh` 通常用于 GPT/Codex 类模型）
 - `timeout?`: `number`（秒）
 - `depends?`: `string[]`（默认 `[]`，依赖的 task ids）
 
@@ -54,7 +54,7 @@
 - `class`: `string`（AgentClass 名称）
 - `task?`: `string`（绑定 task id；绑定后会自动启动）
 - `model?`: `string`
-- `thinking?`: `"low" | "medium" | "high"`
+- `thinking?`: `"low" | "medium" | "high" | "xhigh"`（`xhigh` 通常用于 GPT/Codex 类模型）
 - `prompt?`: `string`（可选的初始消息；**注意：如果提供 `prompt`，必须同时提供 `task`**）
 - `callback?`: 完成/失败/等待时回调通知（可选）
   - `url?`: `string`（HTTP webhook）

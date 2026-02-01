@@ -142,6 +142,12 @@ export namespace AgentManager {
     stdin.write(text)
     stdin.flush()
 
+    if (agent) {
+      await ensureLogfile(agent.worktree)
+      const tag = options?.from === "user" ? "User" : "Master"
+      await fs.appendFile(logPath(agent.worktree), `\n\n[${tag}] ${message}\n`)
+    }
+
     HydraBus.emit(HydraEvent.AgentMessage, {
       agentId,
       message,

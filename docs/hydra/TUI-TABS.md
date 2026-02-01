@@ -5,10 +5,11 @@
 ## 目标与效果
 
 - **不再需要进入单独的 `/hydra` 页面**：主界面始终可见一个 Tab 栏。
-- Tab 栏结构：`[ Main ] [ agent-1 ● ] [ agent-2 ○ ] ...`
+- Tab 栏结构：`[ Main ] [ <task-title> ● ] [ <task-title> ○ ] ...`
   - `Main`：原来的聊天界面（Home/Session）
-  - `agent-*`：该 Hydra 子 Agent 的日志输出与控制
+  - `<task-title>`：优先显示该 Agent 绑定任务的标题（无 task 时回退到 agent 名称）
 - **子 Agent 完成后不会自动消失**：Tab 会保留，状态变为 `○ done/failed`，方便回看输出。
+- **可手动关闭 Tab**：点击 Tab 上的 `×` 或在 Agent 视图下按 `Ctrl+W`（只隐藏，不会终止 Agent）。
 
 ## 如何使用
 
@@ -23,6 +24,7 @@
 
 - 看到该 Agent 的日志输出（尾部跟随）
 - 底部输入框回车会把消息发给当前 Agent
+- 你发出去的消息也会写入该 Agent 的日志，方便回看对话上下文
 
 ## 快捷键
 
@@ -32,6 +34,7 @@
 - `Ctrl+P`：pause 当前 Agent
 - `Ctrl+R`：resume 当前 Agent
 - `Ctrl+K`：kill 当前 Agent（不会自动清理 worktree）
+- `Ctrl+W`：关闭当前 Agent Tab（隐藏）
 
 ## /hydra 命令行为
 
@@ -59,4 +62,3 @@ Hydra 的 `AgentManager/HydraCore` 运行在 worker 内，TUI UI 在主线程直
 新增：
 - `opencode mcp tools <name>`：列出 MCP server 的工具
 - `opencode mcp call <server> <tool> --args '{}'`：调用 MCP 工具（debug）
-

@@ -5,7 +5,7 @@ import z from "zod"
 import yaml from "yaml"
 
 export namespace HydraConfig {
-  export const Thinking = z.enum(["low", "medium", "high"])
+  export const Thinking = z.enum(["low", "medium", "high", "xhigh"])
   export type Thinking = z.infer<typeof Thinking>
 
   const Provider = z.object({

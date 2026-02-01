@@ -8,6 +8,10 @@ export function AgentPanel(props: {
   agent?: AgentInstance.Info
   task?: string
   log?: string
+  onPause: () => void
+  onResume: () => void
+  onKill: () => void
+  onClose: () => void
 }) {
   const { theme } = useTheme()
 
@@ -32,6 +36,20 @@ export function AgentPanel(props: {
                     </text>
                   )}
                 </Show>
+                <box flexGrow={1} justifyContent="flex-end" flexDirection="row" gap={1}>
+                  <text fg={theme.textMuted} onMouseUp={() => props.onPause()}>
+                    [Pause]
+                  </text>
+                  <text fg={theme.textMuted} onMouseUp={() => props.onResume()}>
+                    [Resume]
+                  </text>
+                  <text fg={theme.textMuted} onMouseUp={() => props.onKill()}>
+                    [Kill]
+                  </text>
+                  <text fg={theme.textMuted} onMouseUp={() => props.onClose()}>
+                    [Close]
+                  </text>
+                </box>
               </box>
               <scrollbox stickyScroll={true} stickyStart="bottom" flexGrow={1}>
                 <Switch>
@@ -58,4 +76,3 @@ export function AgentPanel(props: {
     </box>
   )
 }
-

@@ -7,7 +7,7 @@ import { Installation } from "../installation"
 
 const taskStatus = ["pending", "running", "done", "failed", "cancelled"] as const
 const agentStatus = ["idle", "running", "paused", "waiting", "done", "failed"] as const
-const thinking = ["low", "medium", "high"] as const
+const thinking = ["low", "medium", "high", "xhigh"] as const
 const callbackEvent = ["completed", "failed", "waiting"] as const
 
 const ok = () => ({

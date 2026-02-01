@@ -6,7 +6,9 @@ import { AgentInstance } from "@/hydra/agent"
 export function AgentTabs(props: {
   tab: "main" | string
   agents: AgentInstance.Info[]
+  tasks: Record<string, string>
   onSelect: (id: "main" | string) => void
+  onClose: (id: string) => void
 }) {
   const { theme } = useTheme()
 
@@ -33,6 +35,18 @@ export function AgentTabs(props: {
     </text>
   )
 
+  const title = (agent: AgentInstance.Info) => {
+    if (!agent.taskId) return agent.name
+    const task = props.tasks[agent.taskId]
+    if (!task) return agent.name
+    return task
+  }
+
+  const trim = (text: string, max: number) => {
+    if (text.length <= max) return text
+    return text.slice(0, Math.max(1, max - 1)) + "…"
+  }
+
   const Tab = (input: { id: "main" | string; title: string; status?: AgentInstance.Status }) => {
     const active = createMemo(() => props.tab === input.id)
     return (
@@ -46,7 +60,12 @@ export function AgentTabs(props: {
           <Show when={input.status}>
             {(status) => <AgentStatus status={status()} label={false} />}
           </Show>
-          <text fg={active() ? theme.text : theme.textMuted}>[{input.title}]</text>
+          <text fg={active() ? theme.text : theme.textMuted}>[{trim(input.title, 22)}]</text>
+          <Show when={input.id !== "main"}>
+            <text fg={theme.textMuted} onMouseUp={() => props.onClose(String(input.id))}>
+              ×
+            </text>
+          </Show>
         </box>
       </box>
     )
@@ -65,10 +84,9 @@ export function AgentTabs(props: {
     >
       <box flexDirection="row" gap={1}>
         <Tab id="main" title="Main" />
-        <For each={props.agents}>{(agent) => <Tab id={agent.id} title={agent.name} status={agent.status} />}</For>
+        <For each={props.agents}>{(agent) => <Tab id={agent.id} title={title(agent)} status={agent.status} />}</For>
       </box>
       <box flexShrink={0}>{Summary}</box>
     </box>
   )
 }
-

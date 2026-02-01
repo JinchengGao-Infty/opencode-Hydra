@@ -76,7 +76,7 @@ export namespace HydraCore {
     description: string
     agentClass?: string
     model?: string
-    thinking?: "low" | "medium" | "high"
+    thinking?: Task.Thinking
     allow?: string[]
     timeout?: number
     depends?: string[]
@@ -306,15 +306,17 @@ export namespace HydraCore {
   }
 
   function extractOutput(logs: string): string {
-    const match = logs.match(/✅ 完成[\s\S]*?\*\*总结\*\*:\s*([\s\S]*?)(?=\*\*修改的文件|$)/i)
-    return match?.[1]?.trim() || ""
+    const list = Array.from(logs.matchAll(/✅ 完成[\s\S]*?\*\*总结\*\*:\s*([\s\S]*?)(?=\*\*修改的文件|$)/gi))
+    const last = list.at(-1)
+    return last?.[1]?.trim() || ""
   }
 
   function extractFilesChanged(logs: string): string[] {
-    const match = logs.match(/\*\*修改的文件\*\*:\s*([\s\S]*?)(?=\n\n|$)/i)
-    if (!match) return []
+    const list = Array.from(logs.matchAll(/\*\*修改的文件\*\*:\s*([\s\S]*?)(?=\n\n|$)/gi))
+    const last = list.at(-1)
+    if (!last?.[1]) return []
 
-    return match[1]
+    return last[1]
       .split("\n")
       .map((line) => line.replace(/^-\s*/, "").trim())
       .filter(Boolean)

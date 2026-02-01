@@ -20,11 +20,14 @@ export function Hydra() {
     agents: [] as AgentInstance.Info[],
     logs: {} as Record<string, string>,
     tasks: {} as Record<string, string>,
+    hidden: {} as Record<string, true>,
   })
+
+  const viewAgents = createMemo(() => store.agents.filter((x) => !store.hidden[x.id]))
 
   const current = createMemo(() => {
     if (store.tab === "main") return
-    return store.agents.find((x) => x.id === store.tab)
+    return viewAgents().find((x) => x.id === store.tab)
   })
 
   const task = createMemo(() => {
@@ -40,14 +43,14 @@ export function Hydra() {
   })
 
   const clip = (text: string) => {
-    const limit = 100_000
+    const limit = 500_000
     if (text.length <= limit) return text
     return text.slice(text.length - limit)
   }
 
   const load = async (id: string) => {
     const text = await sdk.client.hydra.agent
-      .logs({ id, lines: 400 })
+      .logs({ id, lines: 2000 })
       .then((x) => x.data?.text ?? "")
       .catch(() => "")
     if (!text) return
@@ -58,7 +61,12 @@ export function Hydra() {
     const a = sdk.client.hydra.agent
       .list()
       .then((x) => AgentInstance.Info.array().parse(x.data?.agents ?? []))
-      .then((agents) => setStore("agents", agents))
+      .then((agents) => {
+        setStore("agents", agents)
+        if (store.tab === "main") return
+        if (agents.some((x) => x.id === store.tab)) return
+        setStore("tab", "main")
+      })
 
     const t = sdk.client.hydra.task
       .list()
@@ -70,11 +78,6 @@ export function Hydra() {
       if (!agent) return
       return load(agent.id)
     })
-  }
-
-  const append = (agentId: string, text: string) => {
-    const prev = store.logs[agentId] ?? ""
-    setStore("logs", agentId, clip(prev + text))
   }
 
   const [area, setArea] = createSignal<TextareaRenderable>()
@@ -93,7 +96,6 @@ export function Hydra() {
     if (!text) return
 
     textarea.clear()
-    append(agent.id, `You: ${text}\n`)
     void sdk.client.hydra.agent
       .send({ id: agent.id, message: text })
       .then(() => load(agent.id))
@@ -118,9 +120,16 @@ export function Hydra() {
     void sdk.client.hydra.agent.kill({ id: agent.id, cleanup: false }).then(sync).catch(toast.error)
   }
 
+  const close = (id?: string) => {
+    const tab = id ?? store.tab
+    if (!tab || tab === "main") return
+    setStore("hidden", tab, true)
+    if (store.tab === tab) setStore("tab", "main")
+  }
+
   useKeyboard((evt) => {
     if (evt.name === "tab") {
-      const ids = ["main", ...store.agents.map((x) => x.id)]
+      const ids = ["main", ...viewAgents().map((x) => x.id)]
       const index = Math.max(0, ids.indexOf(store.tab))
       const delta = evt.shift ? -1 : 1
       const next = ids[(index + delta + ids.length) % ids.length]
@@ -147,6 +156,11 @@ export function Hydra() {
       kill()
     }
 
+    if (evt.name === "w") {
+      evt.preventDefault()
+      close()
+    }
+
     const digit = Number(evt.name)
     if (Number.isNaN(digit)) return
 
@@ -156,7 +170,7 @@ export function Hydra() {
       return
     }
 
-    const agent = store.agents[digit - 1]
+    const agent = viewAgents()[digit - 1]
     if (!agent) return
 
     evt.preventDefault()
@@ -194,8 +208,22 @@ export function Hydra() {
 
   return (
     <box width="100%" height="100%" flexDirection="column" backgroundColor={theme.background}>
-      <AgentTabs tab={store.tab} agents={store.agents} onSelect={(id) => setStore("tab", id)} />
-      <AgentPanel agent={current()} task={task()} log={log()} />
+      <AgentTabs
+        tab={store.tab}
+        agents={viewAgents()}
+        tasks={store.tasks}
+        onSelect={(id) => setStore("tab", id)}
+        onClose={(id) => close(id)}
+      />
+      <AgentPanel
+        agent={current()}
+        task={task()}
+        log={log()}
+        onPause={() => pause()}
+        onResume={() => resume()}
+        onKill={() => kill()}
+        onClose={() => close()}
+      />
       <box
         flexDirection="row"
         gap={1}

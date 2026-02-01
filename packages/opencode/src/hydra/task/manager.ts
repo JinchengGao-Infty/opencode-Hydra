@@ -21,7 +21,7 @@ export namespace TaskManager {
       description: string
       agentClass?: string
       model?: string
-      thinking?: "low" | "medium" | "high"
+      thinking?: Task.Thinking
       allow?: string[]
       timeout?: number
       depends?: string[]

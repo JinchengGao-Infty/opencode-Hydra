@@ -5,7 +5,7 @@ export namespace Task {
   export const Status = z.enum(["pending", "running", "done", "failed", "cancelled"])
   export type Status = z.infer<typeof Status>
 
-  export const Thinking = z.enum(["low", "medium", "high"])
+  export const Thinking = z.enum(["low", "medium", "high", "xhigh"])
   export type Thinking = z.infer<typeof Thinking>
 
   export const Meta = z
@@ -47,7 +47,7 @@ export namespace Task {
     description: string
     agentClass?: string
     model?: string
-    thinking?: "low" | "medium" | "high"
+    thinking?: Thinking
     allow?: string[]
     timeout?: number
     depends?: string[]
@@ -68,4 +68,3 @@ export namespace Task {
     })
   }
 }
-

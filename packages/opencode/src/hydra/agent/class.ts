@@ -10,7 +10,7 @@ import PROMPT_REVIEWER from "./prompts/reviewer.txt"
 import PROMPT_CODEX from "./prompts/codex.txt"
 
 export namespace AgentClass {
-  export const Thinking = z.enum(["low", "medium", "high"])
+  export const Thinking = z.enum(["low", "medium", "high", "xhigh"])
   export type Thinking = z.infer<typeof Thinking>
 
   export const Info = z.object({

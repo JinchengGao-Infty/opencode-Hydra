@@ -219,11 +219,14 @@ function App() {
     agents: [] as AgentInstance.Info[],
     logs: {} as Record<string, string>,
     tasks: {} as Record<string, string>,
+    hidden: {} as Record<string, true>,
   })
+
+  const viewAgents = createMemo(() => hydra.agents.filter((x) => !hydra.hidden[x.id]))
 
   const current = createMemo(() => {
     if (hydra.tab === "main") return
-    return hydra.agents.find((x) => x.id === hydra.tab)
+    return viewAgents().find((x) => x.id === hydra.tab)
   })
 
   const task = createMemo(() => {
@@ -239,14 +242,14 @@ function App() {
   })
 
   const clip = (text: string) => {
-    const limit = 100_000
+    const limit = 500_000
     if (text.length <= limit) return text
     return text.slice(text.length - limit)
   }
 
   const load = async (id: string) => {
     const text = await sdk.client.hydra.agent
-      .logs({ id, lines: 400 })
+      .logs({ id, lines: 2000 })
       .then((x) => x.data?.text ?? "")
       .catch(() => "")
     if (!text) return
@@ -275,11 +278,6 @@ function App() {
     })
   }
 
-  const append = (id: string, text: string) => {
-    const prev = hydra.logs[id] ?? ""
-    setHydra("logs", id, clip(prev + text))
-  }
-
   const [area, setArea] = createSignal<TextareaRenderable>()
 
   const send = () => {
@@ -300,7 +298,6 @@ function App() {
     if (!text) return
 
     textarea.clear()
-    append(agent.id, `You: ${text}\n`)
     void sdk.client.hydra.agent
       .send({ id: agent.id, message: text })
       .then(() => load(agent.id))
@@ -346,6 +343,13 @@ function App() {
       .catch(toast.error)
   }
 
+  const close = (id?: string) => {
+    const tab = id ?? hydra.tab
+    if (!tab || tab === "main") return
+    setHydra("hidden", tab, true)
+    if (hydra.tab === tab) setHydra("tab", "main")
+  }
+
   useKeyboard((evt) => {
     const ctrlOnly = evt.ctrl && !evt.meta && !evt.shift
     if (ctrlOnly) {
@@ -357,7 +361,7 @@ function App() {
           return
         }
 
-        const agent = hydra.agents[digit - 1]
+        const agent = viewAgents()[digit - 1]
         if (!agent) return
 
         evt.preventDefault()
@@ -369,7 +373,7 @@ function App() {
     if (hydra.tab === "main") return
 
     if (evt.name === "tab") {
-      const ids = ["main", ...hydra.agents.map((x) => x.id)]
+      const ids = ["main", ...viewAgents().map((x) => x.id)]
       const index = Math.max(0, ids.indexOf(hydra.tab))
       const delta = evt.shift ? -1 : 1
       const next = ids[(index + delta + ids.length) % ids.length]
@@ -393,6 +397,11 @@ function App() {
     if (evt.name === "k") {
       evt.preventDefault()
       kill()
+    }
+
+    if (evt.name === "w") {
+      evt.preventDefault()
+      close()
     }
   })
 
@@ -558,7 +567,7 @@ function App() {
       title: "Hydra",
       value: "hydra.open",
       category: "Hydra",
-      suggested: hydra.agents.length > 0,
+      suggested: viewAgents().length > 0,
       slash: {
         name: "hydra",
       },
@@ -569,7 +578,7 @@ function App() {
           return
         }
 
-        const agent = hydra.agents[0]
+        const agent = viewAgents()[0]
         if (!agent) {
           toast.show({ variant: "warning", message: "No Hydra agents yet", duration: 2500 })
           dialog.clear()
@@ -940,7 +949,13 @@ function App() {
         }
       }}
     >
-      <AgentTabs tab={hydra.tab} agents={hydra.agents} onSelect={(id) => setHydra("tab", id)} />
+      <AgentTabs
+        tab={hydra.tab}
+        agents={viewAgents()}
+        tasks={hydra.tasks}
+        onSelect={(id) => setHydra("tab", id)}
+        onClose={(id) => close(id)}
+      />
       <box flexGrow={1}>
         <box visible={hydra.tab === "main"} flexGrow={1}>
           <Switch>
@@ -956,7 +971,15 @@ function App() {
           </Switch>
         </box>
         <box visible={hydra.tab !== "main"} flexDirection="column" flexGrow={1}>
-          <AgentPanel agent={current()} task={task()} log={log()} />
+          <AgentPanel
+            agent={current()}
+            task={task()}
+            log={log()}
+            onPause={() => pause()}
+            onResume={() => resume()}
+            onKill={() => kill()}
+            onClose={() => close()}
+          />
           <box
             flexDirection="row"
             gap={1}
