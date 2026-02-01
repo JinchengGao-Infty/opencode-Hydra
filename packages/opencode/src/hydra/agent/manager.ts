@@ -8,6 +8,7 @@ import { TaskManager, type Task } from "../task"
 import { AgentClass } from "./class"
 import { AgentInstance } from "./instance"
 import { HydraConfig } from "../config"
+import { CallbackManager } from "../callback"
 
 export namespace AgentManager {
   const instances = new Map<string, AgentInstance.Info>()
@@ -21,6 +22,7 @@ export namespace AgentManager {
       model?: string
       thinking?: AgentClass.Thinking
       taskId?: string
+      callback?: CallbackManager.Config
     },
   ): Promise<AgentInstance.Info> {
     const klass = await AgentClass.get(projectRoot, input.class)
@@ -45,6 +47,7 @@ export namespace AgentManager {
     })
 
     instances.set(agent.id, agent)
+    if (input.callback?.url || input.callback?.command) CallbackManager.register(agent.id, input.callback)
 
     HydraBus.emit(HydraEvent.AgentSpawned, {
       agentId: agent.id,
@@ -237,6 +240,7 @@ export namespace AgentManager {
 
     instances.delete(agentId)
     processes.delete(agentId)
+    CallbackManager.unregister(agentId)
   }
 }
 
