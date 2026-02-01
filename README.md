@@ -20,6 +20,18 @@ agent-mux,是我的第二个版本,利用tmux可视化,这个版本很不错,但
 
 但是Hydra只是claude code的MCP,并且依赖tmux,这对Windows用户很不友好,并且我也有抛弃claude code这种闭源工具的想法,做一款真正的AI-IDE.直到我找到了opencode,我将给予这伟大的开源项目最高的赞美.opencode-Hydra,已经是我理想中的AI-IDE的样子了,只是目前只有TUI,没有适配UI界面.但这也足够了.
 
+那么相信聪明的朋友就有问题了,主包主包,我承认你的idea很能提升效率,但是我的钱包问题怎么办?多agent并行,那得多烧token啊?有没有省钱的方案?
+
+有的兄弟,有的!
+
+https://www.right.codes/register?aff=e5763833
+
+向大家推荐一款codex的中转站,便宜,也相对稳定,但因为是中转站,所以不稳定也不要来找我~稳定建议用官方渠道
+
+同时推荐一个claude code中转站
+
+https://foxcode.rjj.cc/auth/register?aff=047WMWC
+
 ## Hydra 是什么?(专业版本)
 Hydra 用来把一个大目标拆成可并行的小任务，并为每个任务拉起一个子 Agent 执行。你可以把它理解为三个概念：
 
