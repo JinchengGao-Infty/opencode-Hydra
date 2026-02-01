@@ -8,6 +8,7 @@ import { Installation } from "../installation"
 const taskStatus = ["pending", "running", "done", "failed", "cancelled"] as const
 const agentStatus = ["idle", "running", "paused", "waiting", "done", "failed"] as const
 const thinking = ["low", "medium", "high"] as const
+const callbackEvent = ["completed", "failed", "waiting"] as const
 
 const ok = () => ({
   content: [{ type: "text" as const, text: "ok" }],
@@ -167,6 +168,16 @@ export async function createHydraServer(input?: { root?: string }) {
           model: z.string().optional(),
           thinking: z.enum(thinking).optional(),
           prompt: z.string().optional(),
+          callback: z
+            .object({
+              url: z.string().optional(),
+              command: z.string().optional(),
+              events: z.array(z.enum(callbackEvent)).default(["completed", "failed"]),
+              headers: z.record(z.string()).optional(),
+            })
+            .strict()
+            .refine((x) => x.url || x.command, { message: "hydra_agent_spawn: callback requires url or command" })
+            .optional(),
         })
         .strict(),
     },
@@ -178,6 +189,7 @@ export async function createHydraServer(input?: { root?: string }) {
         model: args.model,
         thinking: args.thinking,
         taskId: args.task,
+        callback: args.callback,
       })
 
       if (args.prompt) await AgentManager.send(agent.id, args.prompt, { from: "user" })

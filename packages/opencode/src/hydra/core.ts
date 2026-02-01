@@ -1,4 +1,5 @@
 import { AgentClass, AgentManager } from "./agent"
+import { CallbackManager } from "./callback"
 import { HydraBus, HydraEvent } from "./event"
 import { TaskManager, type Task } from "./task"
 import { HydraConfig } from "./config"
@@ -257,11 +258,16 @@ export namespace HydraCore {
       HydraBus.on(HydraEvent.AgentCompleted, async (data) => {
         const cfg = config
         if (!cfg) return
-        if (!data.taskId) return
 
         const logs = await AgentManager.logs(data.agentId)
         const output = extractOutput(logs)
         const filesChanged = extractFilesChanged(logs)
+
+        void CallbackManager.notify("completed", { agentId: data.agentId, taskId: data.taskId, output, filesChanged }).catch(
+          () => undefined,
+        )
+
+        if (!data.taskId) return
 
         await TaskManager.updateOutput(cfg.projectRoot, data.taskId, output, filesChanged)
         await TaskManager.updateStatus(cfg.projectRoot, data.taskId, "done")
@@ -281,6 +287,9 @@ export namespace HydraCore {
       HydraBus.on(HydraEvent.AgentFailed, async (data) => {
         const cfg = config
         if (!cfg) return
+
+        void CallbackManager.notify("failed", data).catch(() => undefined)
+
         if (!data.taskId) return
 
         await TaskManager.updateStatus(cfg.projectRoot, data.taskId, "failed")
@@ -294,6 +303,8 @@ export namespace HydraCore {
         await AgentManager.cleanup(data.agentId)
       }),
     )
+
+    subs.push(HydraBus.on(HydraEvent.AgentWaiting, (data) => void CallbackManager.notify("waiting", data).catch(() => undefined)))
   }
 
   function extractOutput(logs: string): string {
