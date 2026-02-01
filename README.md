@@ -1,4 +1,4 @@
-[**🇨🇳 简体中文**](./README_zh.md) | [**🇺🇸 English**](./README.md)
+[**🇨🇳 简体中文**](./README.zh.md) | [**🇺🇸 English**](./README.md)
 
 # OpenCode-Hydra (Community Modified Version)
 
