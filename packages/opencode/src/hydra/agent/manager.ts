@@ -93,7 +93,8 @@ export namespace AgentManager {
     await ensureLogfile(agent.worktree)
 
     const prompt = buildPrompt(klass, task, agent.worktree)
-    const proc = await startOpenCodeProcess(agentId, agent.worktree, agent.model, agent.thinking, prompt, opencodeEnv(loaded.providers))
+    const env = { ...(opencodeEnv(loaded.providers) ?? {}), ...(opencodePermission(klass) ?? {}) }
+    const proc = await startOpenCodeProcess(agentId, agent.worktree, agent.model, agent.thinking, prompt, env)
 
     processes.set(agentId, proc)
 
@@ -241,9 +242,11 @@ export namespace AgentManager {
 
 function buildPrompt(klass: AgentClass.Info, task: Task.Info, worktree: string): string {
   const allow = task.meta.allow.join(", ") || "所有文件"
+  const system = klass.systemPrompt ? [klass.prompt, "", klass.systemPrompt].join("\n") : klass.prompt
+  const tools = klass.tools === undefined ? "全部" : klass.tools.join(", ") || "无"
 
   return [
-    klass.prompt,
+    system,
     "",
     "---",
     "",
@@ -258,6 +261,10 @@ function buildPrompt(klass: AgentClass.Info, task: Task.Info, worktree: string):
     "## 允许修改的文件",
     "",
     allow,
+    "",
+    "## 允许使用的工具",
+    "",
+    tools,
     "",
     "## 工作目录",
     "",
@@ -330,6 +337,20 @@ function opencodeEnv(providers: HydraConfig.Config["providers"]): Record<string,
 
   if (Object.keys(map).length === 0) return
   return { OPENCODE_CONFIG_CONTENT: JSON.stringify({ provider: map }) }
+}
+
+function opencodePermission(klass: AgentClass.Info): Record<string, string> | undefined {
+  const list = klass.tools
+  if (!list) return
+
+  const edit = new Set(["edit", "write", "patch", "multiedit"])
+  const perm: Record<string, "allow" | "deny"> = { "*": "deny" }
+  for (const tool of list) {
+    const key = edit.has(tool) ? "edit" : tool
+    perm[key] = "allow"
+  }
+
+  return { OPENCODE_PERMISSION: JSON.stringify(perm) }
 }
 
 async function watchProcess(agentId: string, proc: Subprocess): Promise<void> {

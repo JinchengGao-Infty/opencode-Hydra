@@ -6,7 +6,7 @@ import { tmpdir } from "../fixture/fixture"
 
 describe("Hydra AgentClass", () => {
   test("BUILTIN definitions are valid and complete", () => {
-    expect(Object.keys(AgentClass.BUILTIN).sort()).toEqual(["Architect", "Coder", "Reviewer", "Writer"])
+    expect(Object.keys(AgentClass.BUILTIN).sort()).toEqual(["Architect", "Coder", "Codex", "Reviewer", "Writer"])
 
     for (const key of Object.keys(AgentClass.BUILTIN)) {
       const info = AgentClass.BUILTIN[key]
@@ -109,13 +109,13 @@ describe("Hydra AgentClass", () => {
     )
 
     const list = await AgentClass.list(tmp.path)
-    expect(list.length).toBe(5)
+    expect(list.length).toBe(6)
 
     const coder = list.find((x) => x.name === "Coder")
     expect(coder?.description).toBe("覆盖内置 Coder")
 
     const names = list.map((x) => x.name).sort()
-    expect(names).toEqual(["Architect", "Coder", "Extra", "Reviewer", "Writer"])
+    expect(names).toEqual(["Architect", "Coder", "Codex", "Extra", "Reviewer", "Writer"])
   })
 
   test("exists() returns true for builtin and custom classes", async () => {
@@ -143,5 +143,38 @@ describe("Hydra AgentClass", () => {
     )
 
     expect(await AgentClass.exists(tmp.path, "Custom")).toBeTrue()
+  })
+
+  test("config.yaml overrides merge new fields", async () => {
+    await using tmp = await tmpdir()
+
+    const dir = path.join(tmp.path, ".hydra")
+    await fs.mkdir(dir, { recursive: true })
+
+    const file = path.join(dir, "config.yaml")
+    await Bun.write(
+      file,
+      [
+        "classes:",
+        "  Coder:",
+        '    workflow: "custom workflow"',
+        '    systemPrompt: "extra system"',
+        "    tools:",
+        "      - read",
+        "      - edit",
+        "    timeout: 7200",
+        "    retryOnFail: false",
+        "    maxRetries: 5",
+        "",
+      ].join("\n"),
+    )
+
+    const info = await AgentClass.get(tmp.path, "Coder")
+    expect(info?.workflow).toBe("custom workflow")
+    expect(info?.systemPrompt).toBe("extra system")
+    expect(info?.tools).toEqual(["read", "edit"])
+    expect(info?.timeout).toBe(7200)
+    expect(info?.retryOnFail).toBeFalse()
+    expect(info?.maxRetries).toBe(5)
   })
 })
