@@ -1,22 +1,23 @@
 import { TextareaRenderable } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
-import { createMemo, onCleanup, onMount } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
-import { AgentManager } from "@/hydra/agent/manager"
-import { HydraBus, HydraEvent } from "@/hydra/event"
-import { TaskManager } from "@/hydra/task/manager"
+import { AgentInstance } from "@/hydra/agent"
+import { Task } from "@/hydra/task"
+import { useSDK } from "@tui/context/sdk"
 import { useTheme } from "@tui/context/theme"
 import { useToast } from "@tui/ui/toast"
 import { AgentTabs } from "./AgentTabs"
 import { AgentPanel } from "./AgentPanel"
 
 export function Hydra() {
+  const sdk = useSDK()
   const toast = useToast()
   const { theme } = useTheme()
 
   const [store, setStore] = createStore({
     tab: "main" as "main" | string,
-    agents: AgentManager.list(),
+    agents: [] as AgentInstance.Info[],
     logs: {} as Record<string, string>,
     tasks: {} as Record<string, string>,
   })
@@ -38,17 +39,45 @@ export function Hydra() {
     return store.logs[agent.id] ?? ""
   })
 
-  const sync = () => setStore("agents", AgentManager.list())
+  const clip = (text: string) => {
+    const limit = 100_000
+    if (text.length <= limit) return text
+    return text.slice(text.length - limit)
+  }
+
+  const load = async (id: string) => {
+    const text = await sdk.client.hydra.agent
+      .logs({ id, lines: 400 })
+      .then((x) => x.data?.text ?? "")
+      .catch(() => "")
+    if (!text) return
+    setStore("logs", id, clip(text))
+  }
+
+  const sync = () => {
+    const a = sdk.client.hydra.agent
+      .list()
+      .then((x) => AgentInstance.Info.array().parse(x.data?.agents ?? []))
+      .then((agents) => setStore("agents", agents))
+
+    const t = sdk.client.hydra.task
+      .list()
+      .then((x) => Task.Info.array().parse(x.data?.tasks ?? []))
+      .then((tasks) => setStore("tasks", Object.fromEntries(tasks.map((x) => [x.meta.id, x.title]))))
+
+    return Promise.all([a, t]).then(() => {
+      const agent = current()
+      if (!agent) return
+      return load(agent.id)
+    })
+  }
 
   const append = (agentId: string, text: string) => {
     const prev = store.logs[agentId] ?? ""
-    const next = prev + text
-    const limit = 100_000
-    const clipped = next.length > limit ? next.slice(next.length - limit) : next
-    setStore("logs", agentId, clipped)
+    setStore("logs", agentId, clip(prev + text))
   }
 
-  let textarea: TextareaRenderable
+  const [area, setArea] = createSignal<TextareaRenderable>()
 
   const send = () => {
     const agent = current()
@@ -57,29 +86,36 @@ export function Hydra() {
       return
     }
 
+    const textarea = area()
+    if (!textarea) return
+
     const text = textarea.plainText.trim()
     if (!text) return
 
     textarea.clear()
-    void AgentManager.send(agent.id, text, { from: "user" }).catch(toast.error)
+    append(agent.id, `You: ${text}\n`)
+    void sdk.client.hydra.agent
+      .send({ id: agent.id, message: text })
+      .then(() => load(agent.id))
+      .catch(toast.error)
   }
 
   const pause = () => {
     const agent = current()
     if (!agent) return toast.show({ variant: "warning", message: "Select an agent to pause", duration: 2500 })
-    void AgentManager.pause(agent.id).catch(toast.error)
+    void sdk.client.hydra.agent.pause({ id: agent.id }).then(sync).catch(toast.error)
   }
 
   const resume = () => {
     const agent = current()
     if (!agent) return toast.show({ variant: "warning", message: "Select an agent to resume", duration: 2500 })
-    void AgentManager.resume(agent.id).catch(toast.error)
+    void sdk.client.hydra.agent.resume({ id: agent.id }).then(sync).catch(toast.error)
   }
 
   const kill = () => {
     const agent = current()
     if (!agent) return toast.show({ variant: "warning", message: "Select an agent to kill", duration: 2500 })
-    void AgentManager.kill(agent.id).catch(toast.error)
+    void sdk.client.hydra.agent.kill({ id: agent.id, cleanup: false }).then(sync).catch(toast.error)
   }
 
   useKeyboard((evt) => {
@@ -128,51 +164,31 @@ export function Hydra() {
   })
 
   onMount(() => {
-    sync()
+    void sync().catch(toast.error)
 
-    void TaskManager.list(process.cwd())
-      .then((list) => {
-        setStore(
-          "tasks",
-          Object.fromEntries(list.map((x) => [x.meta.id, x.title])),
-        )
-      })
-      .catch(() => undefined)
+    const id = setInterval(() => {
+      void sync().catch(() => undefined)
+    }, 500)
 
-    void Promise.all(
-      store.agents.map(async (agent) => {
-        const text = await AgentManager.logs(agent.id, { lines: 200 }).catch(() => "")
-        if (!text) return
-        setStore("logs", agent.id, text)
-      }),
+    createEffect(
+      on(
+        () => store.tab,
+        () => {
+          const agent = current()
+          if (!agent) return
+          void load(agent.id).catch(() => undefined)
+        },
+      ),
     )
 
-    const subs = [
-      HydraBus.on(HydraEvent.TaskCreated, (data) => {
-        setStore("tasks", data.taskId, data.title)
-      }),
-      HydraBus.on(HydraEvent.AgentSpawned, () => sync()),
-      HydraBus.on(HydraEvent.AgentStarted, () => sync()),
-      HydraBus.on(HydraEvent.AgentPaused, () => sync()),
-      HydraBus.on(HydraEvent.AgentResumed, () => sync()),
-      HydraBus.on(HydraEvent.AgentWaiting, () => sync()),
-      HydraBus.on(HydraEvent.AgentCompleted, () => sync()),
-      HydraBus.on(HydraEvent.AgentFailed, () => sync()),
-      HydraBus.on(HydraEvent.AgentKilled, () => sync()),
-      HydraBus.on(HydraEvent.AgentOutput, (data) => append(data.agentId, data.text)),
-      HydraBus.on(HydraEvent.AgentMessage, (data) => {
-        const from = data.from === "user" ? "You" : "Master"
-        append(data.agentId, `${from}: ${data.message}\n`)
-      }),
-    ]
-
     setTimeout(() => {
+      const textarea = area()
       if (!textarea || textarea.isDestroyed) return
       textarea.focus()
     }, 1)
 
     onCleanup(() => {
-      subs.forEach((fn) => fn())
+      clearInterval(id)
     })
   })
 
@@ -194,7 +210,7 @@ export function Hydra() {
           &gt;
         </text>
         <textarea
-          ref={(r: TextareaRenderable) => (textarea = r)}
+          ref={(r: TextareaRenderable) => setArea(r)}
           placeholder={store.tab === "main" ? "Select an agent tab to send messages…" : "Message agent…"}
           minHeight={1}
           maxHeight={6}
@@ -212,4 +228,3 @@ export function Hydra() {
     </box>
   )
 }
-

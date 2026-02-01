@@ -2,6 +2,10 @@
 
 Hydra 是 OpenCode 的多 Agent 编排系统。它通过任务文档（`.hydra/tasks/*.md`）、Git worktree 以及事件总线来协调多个 Agent 并行工作。
 
+## TUI（主界面 Tab）
+
+如果你想在 OpenCode 主界面（聊天页）里用 Tab 的方式查看/控制子 Agent，见：`docs/hydra/TUI-TABS.md`。
+
 ## 快速开始（CLI）
 
 > 在你的项目根目录运行以下命令。

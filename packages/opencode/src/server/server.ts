@@ -29,6 +29,7 @@ import { FileRoutes } from "./routes/file"
 import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
+import { HydraRoutes } from "./routes/hydra"
 import { lazy } from "../util/lazy"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { Storage } from "../storage/storage"
@@ -223,6 +224,7 @@ export namespace Server {
         .route("/provider", ProviderRoutes())
         .route("/", FileRoutes())
         .route("/mcp", McpRoutes())
+        .route("/hydra", HydraRoutes())
         .route("/tui", TuiRoutes())
         .post(
           "/instance/dispose",

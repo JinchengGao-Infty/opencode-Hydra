@@ -21,7 +21,7 @@ export namespace CallbackManager {
   const callbacks = new Map<string, Callback>()
 
   export function register(agentId: string, config: Config): void {
-    const events = config.events?.length ? config.events : ["completed", "failed"]
+    const events = config.events?.length ? config.events : (["completed", "failed"] satisfies Event[])
 
     callbacks.set(agentId, {
       agentId,

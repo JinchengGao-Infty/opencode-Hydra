@@ -10,9 +10,11 @@ import { AgentInstance } from "./instance"
 import { HydraConfig } from "../config"
 import { CallbackManager } from "../callback"
 
+type Proc = ReturnType<typeof Bun.spawn>
+
 export namespace AgentManager {
   const instances = new Map<string, AgentInstance.Info>()
-  const processes = new Map<string, Subprocess>()
+  const processes = new Map<string, Proc>()
 
   export async function spawn(
     projectRoot: string,
@@ -129,14 +131,16 @@ export namespace AgentManager {
   ): Promise<void> {
     const proc = processes.get(agentId)
     if (!proc) throw new Error(`AgentManager.send: process not found: ${agentId}`)
-    if (!proc.stdin) throw new Error(`AgentManager.send: process stdin not available: ${agentId}`)
+    const stdin = proc.stdin
+    if (!stdin) throw new Error(`AgentManager.send: process stdin not available: ${agentId}`)
+    if (typeof stdin === "number") throw new Error(`AgentManager.send: process stdin is not writable: ${agentId}`)
 
     const agent = get(agentId)
     if (agent?.status === "waiting") updateStatus(agentId, "running")
 
     const text = message.endsWith("\n") ? message : message + "\n"
-    proc.stdin.write(text)
-    proc.stdin.flush()
+    stdin.write(text)
+    stdin.flush()
 
     HydraBus.emit(HydraEvent.AgentMessage, {
       agentId,
@@ -302,7 +306,7 @@ async function startOpenCodeProcess(
   thinking: string,
   prompt: string,
   env?: Record<string, string>,
-): Promise<Subprocess> {
+): Promise<Proc> {
   const bin = process.env["HYDRA_OPENCODE_BIN"]?.trim() || Bun.which("opencode")
   if (!bin) throw new Error("AgentManager.start: opencode binary not found in PATH")
 
@@ -357,7 +361,7 @@ function opencodePermission(klass: AgentClass.Info): Record<string, string> | un
   return { OPENCODE_PERMISSION: JSON.stringify(perm) }
 }
 
-async function watchProcess(agentId: string, proc: Subprocess): Promise<void> {
+async function watchProcess(agentId: string, proc: Proc): Promise<void> {
   const agent = AgentManager.get(agentId)
   if (!agent) return
 
@@ -390,10 +394,18 @@ async function watchProcess(agentId: string, proc: Subprocess): Promise<void> {
     }
   }
 
-  const pump = async (stream: ReadableStream<Uint8Array> | null, source: "stdout" | "stderr") => {
+  const pump = async (stream: unknown, source: "stdout" | "stderr") => {
     if (!stream) return
-    for await (const chunk of stream) {
-      const text = decoder.decode(chunk)
+    if (typeof stream === "number") return
+    if (typeof stream !== "object") return
+    if (!("getReader" in stream)) return
+
+    const reader = (stream as ReadableStream<Uint8Array>).getReader()
+    while (true) {
+      const next = await reader.read()
+      if (next.done) return
+      if (!next.value) continue
+      const text = decoder.decode(next.value)
       await fs.appendFile(file, text)
       update(text)
       HydraBus.emit(HydraEvent.AgentOutput, {

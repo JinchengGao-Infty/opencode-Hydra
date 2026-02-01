@@ -43,8 +43,8 @@ export namespace HydraConfig {
   const Info = z.object({
     providers: z.record(z.string(), Provider).default({}),
     classes: z.record(z.string(), Class).default({}),
-    defaults: Defaults.default({}),
-    scheduler: Scheduler.default({}),
+    defaults: Defaults.default(() => Defaults.parse({})),
+    scheduler: Scheduler.default(() => Scheduler.parse({})),
   })
   export type Config = z.infer<typeof Info>
 

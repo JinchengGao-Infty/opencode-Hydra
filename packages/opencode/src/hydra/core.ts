@@ -278,8 +278,7 @@ export namespace HydraCore {
           output,
           filesChanged,
         })
-
-        await AgentManager.cleanup(data.agentId)
+        CallbackManager.unregister(data.agentId)
       }),
     )
 
@@ -299,8 +298,7 @@ export namespace HydraCore {
           agentId: data.agentId,
           error: data.error,
         })
-
-        await AgentManager.cleanup(data.agentId)
+        CallbackManager.unregister(data.agentId)
       }),
     )
 

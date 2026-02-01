@@ -1,2 +1,1 @@
-export { Hydra } from "@tui/hydra"
-
+export { Hydra } from "../hydra"

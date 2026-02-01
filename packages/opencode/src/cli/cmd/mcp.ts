@@ -2,6 +2,7 @@ import { cmd } from "./cmd"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
+import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { MCP } from "../../mcp"
@@ -40,12 +41,12 @@ function getAuthStatusText(status: MCP.AuthStatus): string {
 type McpEntry = NonNullable<Config.Info["mcp"]>[string]
 
 type McpConfigured = Config.Mcp
-function isMcpConfigured(config: McpEntry): config is McpConfigured {
+function isMcpConfigured(config: McpEntry | undefined): config is McpConfigured {
   return typeof config === "object" && config !== null && "type" in config
 }
 
 type McpRemote = Extract<McpConfigured, { type: "remote" }>
-function isMcpRemote(config: McpEntry): config is McpRemote {
+function isMcpRemote(config: McpEntry | undefined): config is McpRemote {
   return isMcpConfigured(config) && config.type === "remote"
 }
 
@@ -56,6 +57,8 @@ export const McpCommand = cmd({
     yargs
       .command(McpAddCommand)
       .command(McpListCommand)
+      .command(McpToolsCommand)
+      .command(McpCallCommand)
       .command(McpAuthCommand)
       .command(McpLogoutCommand)
       .command(McpDebugCommand)
@@ -78,20 +81,18 @@ export const McpListCommand = cmd({
         const mcpServers = config.mcp ?? {}
         const statuses = await MCP.status()
 
-        const servers = Object.entries(mcpServers).filter((entry): entry is [string, McpConfigured] =>
-          isMcpConfigured(entry[1]),
-        )
-
-        if (servers.length === 0) {
-          prompts.log.warn("No MCP servers configured")
-          prompts.outro("Add servers with: opencode mcp add")
+        const names = Object.keys(statuses).sort()
+        if (names.length === 0) {
+          prompts.log.warn("No MCP servers available")
+          prompts.outro("Done")
           return
         }
 
-        for (const [name, serverConfig] of servers) {
+        for (const name of names) {
+          const serverConfig = mcpServers[name]
           const status = statuses[name]
-          const hasOAuth = isMcpRemote(serverConfig) && !!serverConfig.oauth
-          const hasStoredTokens = await MCP.hasStoredTokens(name)
+          const hasOAuth = isMcpRemote(serverConfig) && serverConfig.oauth !== false
+          const hasStoredTokens = hasOAuth ? await MCP.hasStoredTokens(name) : false
 
           let statusIcon: string
           let statusText: string
@@ -122,13 +123,189 @@ export const McpListCommand = cmd({
             hint = "\n    " + status.error
           }
 
-          const typeHint = serverConfig.type === "remote" ? serverConfig.url : serverConfig.command.join(" ")
+          const typeHint = isMcpConfigured(serverConfig)
+            ? serverConfig.type === "remote"
+              ? serverConfig.url
+              : serverConfig.command.join(" ")
+            : "built-in (in-process)"
           prompts.log.info(
             `${statusIcon} ${name} ${UI.Style.TEXT_DIM}${statusText}${hint}\n    ${UI.Style.TEXT_DIM}${typeHint}`,
           )
         }
 
-        prompts.outro(`${servers.length} server(s)`)
+        prompts.outro(`${names.length} server(s)`)
+      },
+    })
+  },
+})
+
+export const McpToolsCommand = cmd({
+  command: "tools <name>",
+  describe: "list tools for an MCP server",
+  builder: (yargs) =>
+    yargs
+      .positional("name", {
+        describe: "name of the MCP server",
+        type: "string",
+        demandOption: true,
+      })
+      .option("json", {
+        type: "boolean",
+        describe: "output raw JSON tool definitions",
+      }),
+  async handler(args) {
+    await Instance.provide({
+      directory: process.cwd(),
+      async fn() {
+        UI.empty()
+        prompts.intro("MCP Tools")
+
+        const name = args.name as string
+        const statuses = await MCP.status()
+        const status = statuses[name]
+        if (!status) {
+          prompts.log.error(`MCP server not found: ${name}`)
+          prompts.outro("Done")
+          return
+        }
+
+        if (status.status !== "connected") {
+          const msg = status.status === "failed" ? status.error : status.status
+          prompts.log.warn(`MCP server "${name}" is not connected: ${msg}`)
+          prompts.outro("Done")
+          return
+        }
+
+        const clients = await MCP.clients()
+        const client = clients[name]
+        if (!client) {
+          prompts.log.error(`MCP client not found: ${name}`)
+          prompts.outro("Done")
+          return
+        }
+
+        const list = await client.listTools().catch((e) => {
+          prompts.log.error(`Failed to list tools: ${e instanceof Error ? e.message : String(e)}`)
+          return undefined
+        })
+        if (!list) {
+          prompts.outro("Done")
+          return
+        }
+
+        if (args.json) {
+          process.stdout.write(JSON.stringify(list.tools, null, 2) + "\n")
+          prompts.outro(`${list.tools.length} tool(s)`)
+          return
+        }
+
+        for (const tool of list.tools) {
+          const desc = tool.description ? ` ${UI.Style.TEXT_DIM}${tool.description}` : ""
+          prompts.log.info(`${tool.name}${desc}`)
+        }
+
+        prompts.outro(`${list.tools.length} tool(s)`)
+      },
+    })
+  },
+})
+
+export const McpCallCommand = cmd({
+  command: "call <server> <tool>",
+  describe: "call a tool on an MCP server (debug)",
+  builder: (yargs) =>
+    yargs
+      .positional("server", {
+        describe: "name of the MCP server",
+        type: "string",
+        demandOption: true,
+      })
+      .positional("tool", {
+        describe: "tool name to call",
+        type: "string",
+        demandOption: true,
+      })
+      .option("args", {
+        type: "string",
+        describe: "tool arguments as JSON (must be an object)",
+        default: "{}",
+      })
+      .option("json", {
+        type: "boolean",
+        describe: "output raw JSON CallToolResult",
+      }),
+  async handler(args) {
+    await Instance.provide({
+      directory: process.cwd(),
+      async fn() {
+        UI.empty()
+        prompts.intro("MCP Tool Call")
+
+        const server = args.server as string
+        const tool = args.tool as string
+        const input = parseJsonObject(args.args)
+
+        const statuses = await MCP.status()
+        const status = statuses[server]
+        if (!status) {
+          prompts.log.error(`MCP server not found: ${server}`)
+          prompts.outro("Done")
+          return
+        }
+
+        if (status.status !== "connected") {
+          const msg = status.status === "failed" ? status.error : status.status
+          prompts.log.warn(`MCP server "${server}" is not connected: ${msg}`)
+          prompts.outro("Done")
+          return
+        }
+
+        const clients = await MCP.clients()
+        const client = clients[server]
+        if (!client) {
+          prompts.log.error(`MCP client not found: ${server}`)
+          prompts.outro("Done")
+          return
+        }
+
+        const raw = await client
+          .callTool(
+            {
+              name: tool,
+              arguments: input,
+            },
+            CallToolResultSchema,
+          )
+          .catch((e) => {
+            prompts.log.error(`Tool call failed: ${e instanceof Error ? e.message : String(e)}`)
+            return undefined
+          })
+
+        if (!raw) {
+          prompts.outro("Done")
+          return
+        }
+
+        const result = CallToolResultSchema.parse(raw)
+
+        if (args.json) {
+          process.stdout.write(JSON.stringify(result, null, 2) + "\n")
+          prompts.outro("Done")
+          return
+        }
+
+        if (result.structuredContent) {
+          process.stdout.write(JSON.stringify(result.structuredContent, null, 2) + "\n")
+          prompts.outro("Done")
+          return
+        }
+
+        const texts = result.content.filter((x) => x.type === "text").map((x) => x.text)
+        if (texts.length) {
+          prompts.log.info(texts.join("\n\n"))
+        }
+
+        prompts.outro("Done")
       },
     })
   },
@@ -276,6 +453,22 @@ export const McpAuthCommand = cmd({
     })
   },
 })
+
+function parseJsonObject(input: unknown): Record<string, unknown> {
+  if (typeof input !== "string") return {}
+  const text = input.trim()
+  if (!text) return {}
+
+  try {
+    const data = JSON.parse(text) as unknown
+    const ok = !!data && typeof data === "object" && !Array.isArray(data)
+    if (!ok) throw new Error("MCP tool args must be a JSON object")
+    return data as Record<string, unknown>
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    throw new Error(`Failed to parse --args JSON: ${msg}`)
+  }
+}
 
 export const McpAuthListCommand = cmd({
   command: "list",

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "node:path"
 import { AgentManager } from "../../src/hydra/agent/manager"
+import { AgentInstance } from "../../src/hydra/agent/instance"
 import { TaskManager } from "../../src/hydra/task/manager"
 import { tmpdir } from "../fixture/fixture"
 
@@ -95,7 +96,7 @@ async function stub(dir: string) {
   return file
 }
 
-async function wait(agentId: string, status: string) {
+async function wait(agentId: string, status: AgentInstance.Status) {
   for (const _ of Array.from({ length: 200 })) {
     if (AgentManager.get(agentId)?.status === status) return
     await Bun.sleep(10)

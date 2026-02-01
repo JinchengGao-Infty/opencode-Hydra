@@ -718,6 +718,21 @@ export type EventTuiSessionSelect = {
   }
 }
 
+export type EventWorktreeReady = {
+  type: "worktree.ready"
+  properties: {
+    name: string
+    branch: string
+  }
+}
+
+export type EventWorktreeFailed = {
+  type: "worktree.failed"
+  properties: {
+    message: string
+  }
+}
+
 export type EventMcpToolsChanged = {
   type: "mcp.tools.changed"
   properties: {
@@ -868,21 +883,6 @@ export type EventPtyDeleted = {
   }
 }
 
-export type EventWorktreeReady = {
-  type: "worktree.ready"
-  properties: {
-    name: string
-    branch: string
-  }
-}
-
-export type EventWorktreeFailed = {
-  type: "worktree.failed"
-  properties: {
-    message: string
-  }
-}
-
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
@@ -911,6 +911,8 @@ export type Event =
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventTuiSessionSelect
+  | EventWorktreeReady
+  | EventWorktreeFailed
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted
@@ -924,8 +926,6 @@ export type Event =
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
-  | EventWorktreeReady
-  | EventWorktreeFailed
 
 export type GlobalEvent = {
   directory: string
@@ -2098,6 +2098,77 @@ export type McpStatus =
   | McpStatusFailed
   | McpStatusNeedsAuth
   | McpStatusNeedsClientRegistration
+
+export type HydraStatus = {
+  running: boolean
+  config?: {
+    projectRoot: string
+    maxAgents: number
+    pollInterval: number
+    defaultTimeout: number
+  }
+  tasks: {
+    total: number
+    pending: number
+    running: number
+    done: number
+    failed: number
+    cancelled: number
+  }
+  agents: {
+    total: number
+    running: number
+    waiting: number
+    paused: number
+  }
+}
+
+export type HydraTaskMeta = {
+  id: string
+  status?: "pending" | "running" | "done" | "failed" | "cancelled"
+  agentClass?: string
+  model?: string
+  thinking?: "low" | "medium" | "high"
+  allow?: Array<string>
+  timeout?: number
+  depends?: Array<string>
+  created: string
+  started?: string
+  finished?: string
+}
+
+export type HydraTask = {
+  meta: HydraTaskMeta
+  title: string
+  description: string
+  output?: string
+  filesChanged?: Array<string>
+}
+
+export type HydraTaskList = {
+  tasks: Array<HydraTask>
+}
+
+export type HydraAgentList = {
+  agents: Array<{
+    id: string
+    class: string
+    name: string
+    model: string
+    thinking: "low" | "medium" | "high"
+    worktree: string
+    taskId?: string
+    status: "idle" | "running" | "paused" | "waiting" | "done" | "failed"
+    pid?: number
+    created: string
+    started?: string
+    finished?: string
+  }>
+}
+
+export type HydraAgentLogs = {
+  text: string
+}
 
 export type Path = {
   home: string
@@ -4465,6 +4536,251 @@ export type McpDisconnectResponses = {
 }
 
 export type McpDisconnectResponse = McpDisconnectResponses[keyof McpDisconnectResponses]
+
+export type HydraStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/hydra/status"
+}
+
+export type HydraStatusResponses = {
+  /**
+   * Hydra status
+   */
+  200: HydraStatus
+}
+
+export type HydraStatusResponse = HydraStatusResponses[keyof HydraStatusResponses]
+
+export type HydraTaskListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    status?: "pending" | "running" | "done" | "failed" | "cancelled"
+  }
+  url: "/hydra/task"
+}
+
+export type HydraTaskListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HydraTaskListError = HydraTaskListErrors[keyof HydraTaskListErrors]
+
+export type HydraTaskListResponses = {
+  /**
+   * Hydra tasks
+   */
+  200: HydraTaskList
+}
+
+export type HydraTaskListResponse = HydraTaskListResponses[keyof HydraTaskListResponses]
+
+export type HydraAgentListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    status?: "idle" | "running" | "paused" | "waiting" | "done" | "failed"
+  }
+  url: "/hydra/agent"
+}
+
+export type HydraAgentListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type HydraAgentListError = HydraAgentListErrors[keyof HydraAgentListErrors]
+
+export type HydraAgentListResponses = {
+  /**
+   * Hydra agents
+   */
+  200: HydraAgentList
+}
+
+export type HydraAgentListResponse = HydraAgentListResponses[keyof HydraAgentListResponses]
+
+export type HydraAgentLogsData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    lines?: number
+    follow?: boolean
+  }
+  url: "/hydra/agent/{id}/logs"
+}
+
+export type HydraAgentLogsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HydraAgentLogsError = HydraAgentLogsErrors[keyof HydraAgentLogsErrors]
+
+export type HydraAgentLogsResponses = {
+  /**
+   * Hydra agent logs
+   */
+  200: HydraAgentLogs
+}
+
+export type HydraAgentLogsResponse = HydraAgentLogsResponses[keyof HydraAgentLogsResponses]
+
+export type HydraAgentSendData = {
+  body?: {
+    message: string
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/hydra/agent/{id}/send"
+}
+
+export type HydraAgentSendErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HydraAgentSendError = HydraAgentSendErrors[keyof HydraAgentSendErrors]
+
+export type HydraAgentSendResponses = {
+  /**
+   * Message sent
+   */
+  200: boolean
+}
+
+export type HydraAgentSendResponse = HydraAgentSendResponses[keyof HydraAgentSendResponses]
+
+export type HydraAgentPauseData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/hydra/agent/{id}/pause"
+}
+
+export type HydraAgentPauseErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HydraAgentPauseError = HydraAgentPauseErrors[keyof HydraAgentPauseErrors]
+
+export type HydraAgentPauseResponses = {
+  /**
+   * Agent paused
+   */
+  200: boolean
+}
+
+export type HydraAgentPauseResponse = HydraAgentPauseResponses[keyof HydraAgentPauseResponses]
+
+export type HydraAgentResumeData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/hydra/agent/{id}/resume"
+}
+
+export type HydraAgentResumeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HydraAgentResumeError = HydraAgentResumeErrors[keyof HydraAgentResumeErrors]
+
+export type HydraAgentResumeResponses = {
+  /**
+   * Agent resumed
+   */
+  200: boolean
+}
+
+export type HydraAgentResumeResponse = HydraAgentResumeResponses[keyof HydraAgentResumeResponses]
+
+export type HydraAgentKillData = {
+  body?: {
+    cleanup?: boolean
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/hydra/agent/{id}/kill"
+}
+
+export type HydraAgentKillErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type HydraAgentKillError = HydraAgentKillErrors[keyof HydraAgentKillErrors]
+
+export type HydraAgentKillResponses = {
+  /**
+   * Agent killed
+   */
+  200: boolean
+}
+
+export type HydraAgentKillResponse = HydraAgentKillResponses[keyof HydraAgentKillResponses]
 
 export type TuiAppendPromptData = {
   body?: {

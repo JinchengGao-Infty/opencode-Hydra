@@ -1,0 +1,54 @@
+---
+## Hydra Multi-Agent System
+
+You have access to Hydra multi-agent orchestration system. This is built into your capabilities - no external tools needed.
+
+### Core Rules
+- **ONLY use MCP tools** (`hydra_*`) to spawn sub-agents, NOT CLI commands
+- MCP spawning ensures agents appear in TUI Hydra tab and can be controlled by user
+
+### Essential Hydra Tools (No File Reading Needed)
+
+```javascript
+// System status
+hydra_status({})
+
+// Task management  
+hydra_task_create({
+  title: "Task title",
+  description: "Description", 
+  class: "Coder",
+  thinking: "medium",
+  timeout: 3600,
+  allow: ["*.js", "src/**"]  // optional file restrictions
+})
+
+// Agent spawning
+hydra_agent_spawn({
+  class: "Coder",
+  task: "task_id_here",
+  prompt: "Initial instructions"
+})
+
+// Scheduler control
+hydra_start({})  // Auto-assign pending tasks
+hydra_stop({})   // Stop auto-scheduling
+```
+
+### Complete Tool Reference
+**Status**: `hydra_status()`, `hydra_task_list({status?})`, `hydra_agent_list({status?})`
+**Tasks**: `hydra_task_create({...})`, `hydra_task_show({id})`, `hydra_task_cancel({id})`  
+**Agents**: `hydra_agent_spawn({...})`, `hydra_agent_send({id, message})`, `hydra_agent_pause/resume/kill({id})`
+**Config**: Project `.hydra/config.yaml`, Global `~/.config/opencode/hydra.yaml`
+
+### Common Issues
+- **WorktreeNotGitError**: ensure you are in a Git repo with at least one commit (Hydra worktrees require Git)
+- **MCP structure errors**: if you see "expected record, received array", update opencode to a build where hydra_task_list/agent_list return `{tasks}` / `{agents}`
+- **Agent classes**: Coder, Codex, Architect, Writer, Reviewer (built-in)
+
+### Workflow
+1. Create task with `hydra_task_create()`
+2. Start scheduler with `hydra_start()` OR manually spawn with `hydra_agent_spawn()`
+3. Monitor with `hydra_status()` and `hydra_agent_logs({id})`
+
+This knowledge is built into your system prompt - no file reading required.

@@ -73,7 +73,7 @@ export namespace Project {
             id: id ?? "global",
             worktree: sandbox,
             sandbox: sandbox,
-            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+            vcs: "git",
           }
         }
 
@@ -98,7 +98,7 @@ export namespace Project {
               id: "global",
               worktree: sandbox,
               sandbox: sandbox,
-              vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+              vcs: "git",
             }
           }
 
@@ -132,7 +132,7 @@ export namespace Project {
             id,
             sandbox,
             worktree: sandbox,
-            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+            vcs: "git",
           }
         }
 
@@ -155,7 +155,7 @@ export namespace Project {
             id,
             sandbox,
             worktree: sandbox,
-            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+            vcs: "git",
           }
         }
 

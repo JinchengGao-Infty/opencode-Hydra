@@ -5,6 +5,12 @@ import { AgentInstance } from "@/hydra/agent"
 export function AgentStatus(props: { status: AgentInstance.Status; label?: boolean }) {
   const { theme } = useTheme()
 
+  const dot = createMemo(() => {
+    if (props.status === "done") return "○"
+    if (props.status === "failed") return "○"
+    return "●"
+  })
+
   const item = createMemo(() => {
     if (props.status === "running") return { fg: theme.success, text: "running" }
     if (props.status === "waiting") return { fg: theme.warning, text: "waiting" }
@@ -16,11 +22,10 @@ export function AgentStatus(props: { status: AgentInstance.Status; label?: boole
 
   return (
     <text fg={theme.textMuted}>
-      <span style={{ fg: item().fg }}>●</span>
+      <span style={{ fg: item().fg }}>{dot()}</span>
       <Show when={props.label !== false}>
         <span> {item().text}</span>
       </Show>
     </text>
   )
 }
-

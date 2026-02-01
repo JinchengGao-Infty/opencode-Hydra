@@ -40,6 +40,21 @@ import type {
   GlobalDisposeResponses,
   GlobalEventResponses,
   GlobalHealthResponses,
+  HydraAgentKillErrors,
+  HydraAgentKillResponses,
+  HydraAgentListErrors,
+  HydraAgentListResponses,
+  HydraAgentLogsErrors,
+  HydraAgentLogsResponses,
+  HydraAgentPauseErrors,
+  HydraAgentPauseResponses,
+  HydraAgentResumeErrors,
+  HydraAgentResumeResponses,
+  HydraAgentSendErrors,
+  HydraAgentSendResponses,
+  HydraStatusResponses,
+  HydraTaskListErrors,
+  HydraTaskListResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
   McpAddErrors,
@@ -2590,6 +2605,269 @@ export class Mcp extends HeyApiClient {
   }
 }
 
+export class Task extends HeyApiClient {
+  /**
+   * List Hydra tasks
+   *
+   * List Hydra tasks for the current project (optionally filtered by status).
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      status?: "pending" | "running" | "done" | "failed" | "cancelled"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "status" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<HydraTaskListResponses, HydraTaskListErrors, ThrowOnError>({
+      url: "/hydra/task",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Agent extends HeyApiClient {
+  /**
+   * List Hydra agents
+   *
+   * List Hydra agents (optionally filtered by status).
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      status?: "idle" | "running" | "paused" | "waiting" | "done" | "failed"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "status" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<HydraAgentListResponses, HydraAgentListErrors, ThrowOnError>({
+      url: "/hydra/agent",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get Hydra agent logs
+   *
+   * Get Hydra agent logs (tail N lines).
+   */
+  public logs<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      lines?: number
+      follow?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "lines" },
+            { in: "query", key: "follow" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<HydraAgentLogsResponses, HydraAgentLogsErrors, ThrowOnError>({
+      url: "/hydra/agent/{id}/logs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Send message to Hydra agent
+   *
+   * Send a message to a running Hydra agent process.
+   */
+  public send<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      message?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "message" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HydraAgentSendResponses, HydraAgentSendErrors, ThrowOnError>({
+      url: "/hydra/agent/{id}/send",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Pause Hydra agent
+   *
+   * Pause a running Hydra agent process.
+   */
+  public pause<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HydraAgentPauseResponses, HydraAgentPauseErrors, ThrowOnError>({
+      url: "/hydra/agent/{id}/pause",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Resume Hydra agent
+   *
+   * Resume a paused Hydra agent process.
+   */
+  public resume<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HydraAgentResumeResponses, HydraAgentResumeErrors, ThrowOnError>({
+      url: "/hydra/agent/{id}/resume",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Kill Hydra agent
+   *
+   * Kill a Hydra agent process (optionally cleanup worktree).
+   */
+  public kill<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory?: string
+      cleanup?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "cleanup" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<HydraAgentKillResponses, HydraAgentKillErrors, ThrowOnError>({
+      url: "/hydra/agent/{id}/kill",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Hydra extends HeyApiClient {
+  /**
+   * Get Hydra status
+   *
+   * Retrieve current Hydra scheduler state and basic counts.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<HydraStatusResponses, unknown, ThrowOnError>({
+      url: "/hydra/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _task?: Task
+  get task(): Task {
+    return (this._task ??= new Task({ client: this.client }))
+  }
+
+  private _agent?: Agent
+  get agent(): Agent {
+    return (this._agent ??= new Agent({ client: this.client }))
+  }
+}
+
 export class Control extends HeyApiClient {
   /**
    * Get next TUI request
@@ -3264,6 +3542,11 @@ export class OpencodeClient extends HeyApiClient {
   private _mcp?: Mcp
   get mcp(): Mcp {
     return (this._mcp ??= new Mcp({ client: this.client }))
+  }
+
+  private _hydra?: Hydra
+  get hydra(): Hydra {
+    return (this._hydra ??= new Hydra({ client: this.client }))
   }
 
   private _tui?: Tui

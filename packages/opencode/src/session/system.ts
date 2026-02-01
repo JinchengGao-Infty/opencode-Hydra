@@ -8,20 +8,21 @@ import PROMPT_BEAST from "./prompt/beast.txt"
 import PROMPT_GEMINI from "./prompt/gemini.txt"
 
 import PROMPT_CODEX from "./prompt/codex_header.txt"
+import PROMPT_HYDRA from "./prompt/hydra.txt"
 import type { Provider } from "@/provider/provider"
 
 export namespace SystemPrompt {
   export function instructions() {
-    return PROMPT_CODEX.trim()
+    return [PROMPT_CODEX.trim(), PROMPT_HYDRA.trim()].join("\n\n")
   }
 
   export function provider(model: Provider.Model) {
-    if (model.api.id.includes("gpt-5")) return [PROMPT_CODEX]
+    if (model.api.id.includes("gpt-5")) return [PROMPT_CODEX, PROMPT_HYDRA]
     if (model.api.id.includes("gpt-") || model.api.id.includes("o1") || model.api.id.includes("o3"))
-      return [PROMPT_BEAST]
-    if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI]
-    if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
-    return [PROMPT_ANTHROPIC_WITHOUT_TODO]
+      return [PROMPT_BEAST, PROMPT_HYDRA]
+    if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI, PROMPT_HYDRA]
+    if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC, PROMPT_HYDRA]
+    return [PROMPT_ANTHROPIC_WITHOUT_TODO, PROMPT_HYDRA]
   }
 
   export async function environment(model: Provider.Model) {

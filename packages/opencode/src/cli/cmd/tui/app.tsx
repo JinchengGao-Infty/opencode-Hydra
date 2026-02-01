@@ -1,8 +1,22 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
-import { TextAttributes } from "@opentui/core"
+import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import {
+  Switch,
+  Match,
+  createEffect,
+  untrack,
+  ErrorBoundary,
+  createSignal,
+  onMount,
+  batch,
+  Show,
+  on,
+  createMemo,
+  onCleanup,
+} from "solid-js"
+import { createStore } from "solid-js/store"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -22,7 +36,8 @@ import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
-import { Hydra } from "@tui/routes/hydra"
+import { AgentTabs } from "./hydra/AgentTabs"
+import { AgentPanel } from "./hydra/AgentPanel"
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
@@ -37,6 +52,8 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { AgentInstance } from "@/hydra/agent"
+import { Task } from "@/hydra/task"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -197,6 +214,188 @@ function App() {
   const exit = useExit()
   const promptRef = usePromptRef()
 
+  const [hydra, setHydra] = createStore({
+    tab: "main" as "main" | string,
+    agents: [] as AgentInstance.Info[],
+    logs: {} as Record<string, string>,
+    tasks: {} as Record<string, string>,
+  })
+
+  const current = createMemo(() => {
+    if (hydra.tab === "main") return
+    return hydra.agents.find((x) => x.id === hydra.tab)
+  })
+
+  const task = createMemo(() => {
+    const agent = current()
+    if (!agent?.taskId) return
+    return hydra.tasks[agent.taskId]
+  })
+
+  const log = createMemo(() => {
+    const agent = current()
+    if (!agent) return
+    return hydra.logs[agent.id] ?? ""
+  })
+
+  const clip = (text: string) => {
+    const limit = 100_000
+    if (text.length <= limit) return text
+    return text.slice(text.length - limit)
+  }
+
+  const load = async (id: string) => {
+    const text = await sdk.client.hydra.agent
+      .logs({ id, lines: 400 })
+      .then((x) => x.data?.text ?? "")
+      .catch(() => "")
+    if (!text) return
+    setHydra("logs", id, clip(text))
+  }
+
+  const syncHydra = () => {
+    const a = sdk.client.hydra.agent
+      .list()
+      .then((x) => AgentInstance.Info.array().parse(x.data?.agents ?? []))
+      .then((agents) => {
+        setHydra("agents", agents)
+        if (hydra.tab === "main") return
+        if (agents.some((x) => x.id === hydra.tab)) return
+        setHydra("tab", "main")
+      })
+
+    const t = sdk.client.hydra.task
+      .list()
+      .then((x) => Task.Info.array().parse(x.data?.tasks ?? []))
+      .then((tasks) => setHydra("tasks", Object.fromEntries(tasks.map((x) => [x.meta.id, x.title]))))
+
+    return Promise.all([a, t]).then(() => {
+      if (hydra.tab === "main") return
+      return load(hydra.tab)
+    })
+  }
+
+  const append = (id: string, text: string) => {
+    const prev = hydra.logs[id] ?? ""
+    setHydra("logs", id, clip(prev + text))
+  }
+
+  const [area, setArea] = createSignal<TextareaRenderable>()
+
+  const send = () => {
+    const agent = current()
+    if (!agent) {
+      toast.show({ variant: "warning", message: "Select an agent tab to send messages", duration: 2500 })
+      return
+    }
+    if (agent.status === "done" || agent.status === "failed") {
+      toast.show({ variant: "info", message: "Agent already completed", duration: 2500 })
+      return
+    }
+
+    const textarea = area()
+    if (!textarea) return
+
+    const text = textarea.plainText.trim()
+    if (!text) return
+
+    textarea.clear()
+    append(agent.id, `You: ${text}\n`)
+    void sdk.client.hydra.agent
+      .send({ id: agent.id, message: text })
+      .then(() => load(agent.id))
+      .catch(toast.error)
+  }
+
+  const pause = () => {
+    const agent = current()
+    if (!agent) return toast.show({ variant: "warning", message: "Select an agent to pause", duration: 2500 })
+    if (agent.status !== "running" && agent.status !== "waiting") {
+      toast.show({ variant: "info", message: "Agent is not running", duration: 2500 })
+      return
+    }
+    void sdk.client.hydra.agent
+      .pause({ id: agent.id })
+      .then(() => syncHydra())
+      .catch(toast.error)
+  }
+
+  const resume = () => {
+    const agent = current()
+    if (!agent) return toast.show({ variant: "warning", message: "Select an agent to resume", duration: 2500 })
+    if (agent.status !== "paused") {
+      toast.show({ variant: "info", message: "Agent is not paused", duration: 2500 })
+      return
+    }
+    void sdk.client.hydra.agent
+      .resume({ id: agent.id })
+      .then(() => syncHydra())
+      .catch(toast.error)
+  }
+
+  const kill = () => {
+    const agent = current()
+    if (!agent) return toast.show({ variant: "warning", message: "Select an agent to kill", duration: 2500 })
+    if (agent.status === "done" || agent.status === "failed") {
+      toast.show({ variant: "info", message: "Agent already completed", duration: 2500 })
+      return
+    }
+    void sdk.client.hydra.agent
+      .kill({ id: agent.id, cleanup: false })
+      .then(() => syncHydra())
+      .catch(toast.error)
+  }
+
+  useKeyboard((evt) => {
+    const ctrlOnly = evt.ctrl && !evt.meta && !evt.shift
+    if (ctrlOnly) {
+      const digit = Number(evt.name)
+      if (!Number.isNaN(digit)) {
+        if (digit === 0) {
+          evt.preventDefault()
+          setHydra("tab", "main")
+          return
+        }
+
+        const agent = hydra.agents[digit - 1]
+        if (!agent) return
+
+        evt.preventDefault()
+        setHydra("tab", agent.id)
+        return
+      }
+    }
+
+    if (hydra.tab === "main") return
+
+    if (evt.name === "tab") {
+      const ids = ["main", ...hydra.agents.map((x) => x.id)]
+      const index = Math.max(0, ids.indexOf(hydra.tab))
+      const delta = evt.shift ? -1 : 1
+      const next = ids[(index + delta + ids.length) % ids.length]
+      if (next) setHydra("tab", next)
+      evt.preventDefault()
+      return
+    }
+
+    if (!ctrlOnly) return
+
+    if (evt.name === "p") {
+      evt.preventDefault()
+      pause()
+    }
+
+    if (evt.name === "r") {
+      evt.preventDefault()
+      resume()
+    }
+
+    if (evt.name === "k") {
+      evt.preventDefault()
+      kill()
+    }
+  })
+
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {
     if (!text || text.length === 0) return
@@ -216,13 +415,14 @@ function App() {
   createEffect(() => {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
 
-    if (route.data.type === "home") {
-      renderer.setTerminalTitle("OpenCode")
+    const agent = current()
+    if (agent) {
+      renderer.setTerminalTitle(`OC | ${agent.name}`)
       return
     }
 
-    if (route.data.type === "hydra") {
-      renderer.setTerminalTitle("OC | Hydra")
+    if (route.data.type === "home") {
+      renderer.setTerminalTitle("OpenCode")
       return
     }
 
@@ -261,6 +461,37 @@ function App() {
       }
     })
   })
+
+  onMount(() => {
+    void syncHydra().catch(() => undefined)
+
+    const id = setInterval(() => {
+      void syncHydra().catch(() => undefined)
+    }, 750)
+
+    onCleanup(() => {
+      clearInterval(id)
+    })
+  })
+
+  createEffect(
+    on(
+      () => hydra.tab,
+      (tab) => {
+        if (tab === "main") {
+          setTimeout(() => promptRef.current?.focus(), 1)
+          return
+        }
+
+        promptRef.current?.blur()
+        setTimeout(() => {
+          const textarea = area()
+          if (!textarea || textarea.isDestroyed) return
+          textarea.focus()
+        }, 1)
+      },
+    ),
+  )
 
   let continued = false
   createEffect(() => {
@@ -327,11 +558,25 @@ function App() {
       title: "Hydra",
       value: "hydra.open",
       category: "Hydra",
+      suggested: hydra.agents.length > 0,
       slash: {
         name: "hydra",
       },
       onSelect: () => {
-        route.navigate({ type: "hydra" })
+        if (hydra.tab !== "main") {
+          setHydra("tab", "main")
+          dialog.clear()
+          return
+        }
+
+        const agent = hydra.agents[0]
+        if (!agent) {
+          toast.show({ variant: "warning", message: "No Hydra agents yet", duration: 2500 })
+          dialog.clear()
+          return
+        }
+
+        setHydra("tab", agent.id)
         dialog.clear()
       },
     },
@@ -680,6 +925,7 @@ function App() {
       width={dimensions().width}
       height={dimensions().height}
       backgroundColor={theme.background}
+      flexDirection="column"
       onMouseUp={async () => {
         if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
           renderer.clearSelection()
@@ -694,17 +940,54 @@ function App() {
         }
       }}
     >
-      <Switch>
-        <Match when={route.data.type === "home"}>
-          <Home />
-        </Match>
-        <Match when={route.data.type === "hydra"}>
-          <Hydra />
-        </Match>
-        <Match when={route.data.type === "session"}>
-          <Session />
-        </Match>
-      </Switch>
+      <AgentTabs tab={hydra.tab} agents={hydra.agents} onSelect={(id) => setHydra("tab", id)} />
+      <box flexGrow={1}>
+        <box visible={hydra.tab === "main"} flexGrow={1}>
+          <Switch>
+            <Match when={route.data.type === "home"}>
+              <Home />
+            </Match>
+            <Match when={route.data.type === "session"}>
+              <Session />
+            </Match>
+            <Match when={true}>
+              <Home />
+            </Match>
+          </Switch>
+        </box>
+        <box visible={hydra.tab !== "main"} flexDirection="column" flexGrow={1}>
+          <AgentPanel agent={current()} task={task()} log={log()} />
+          <box
+            flexDirection="row"
+            gap={1}
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={1}
+            paddingBottom={1}
+            flexShrink={0}
+            backgroundColor={theme.backgroundPanel}
+          >
+            <text fg={theme.textMuted} flexShrink={0}>
+              &gt;
+            </text>
+            <textarea
+              ref={(r: TextareaRenderable) => setArea(r)}
+              placeholder={current() ? "Message agent…" : "Loading agent…"}
+              minHeight={1}
+              maxHeight={6}
+              flexGrow={1}
+              textColor={theme.text}
+              focusedTextColor={theme.text}
+              cursorColor={theme.text}
+              onKeyDown={(e) => {
+                if (e.name !== "return" || e.shift) return
+                e.preventDefault()
+                send()
+              }}
+            />
+          </box>
+        </box>
+      </box>
     </box>
   )
 }

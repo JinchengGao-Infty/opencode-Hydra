@@ -17,7 +17,8 @@ const ok = () => ({
 
 const json = (data: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
-  structuredContent: data,
+  structuredContent:
+    typeof data === "object" && data !== null && !Array.isArray(data) ? (data as Record<string, unknown>) : undefined,
 })
 
 const text = (data: string) => ({
@@ -55,7 +56,7 @@ export async function createHydraServer(input?: { root?: string }) {
     async (args) => {
       const list = await TaskManager.list(root)
       const tasks = args.status ? list.filter((task) => task.meta.status === args.status) : list
-      return json(tasks)
+      return json({ tasks })
     },
   )
 
@@ -126,7 +127,7 @@ export async function createHydraServer(input?: { root?: string }) {
     async (args) => {
       const list = AgentManager.list()
       const agents = args.status ? list.filter((agent) => agent.status === args.status) : list
-      return json(agents)
+      return json({ agents })
     },
   )
 
@@ -173,7 +174,7 @@ export async function createHydraServer(input?: { root?: string }) {
               url: z.string().optional(),
               command: z.string().optional(),
               events: z.array(z.enum(callbackEvent)).default(["completed", "failed"]),
-              headers: z.record(z.string()).optional(),
+              headers: z.record(z.string(), z.string()).optional(),
             })
             .strict()
             .refine((x) => x.url || x.command, { message: "hydra_agent_spawn: callback requires url or command" })
