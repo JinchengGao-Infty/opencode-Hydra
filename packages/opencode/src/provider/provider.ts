@@ -970,6 +970,14 @@ export namespace Provider {
       }
 
       if (!options["baseURL"]) options["baseURL"] = model.api.url
+
+      if (model.providerID === "anthropic" && typeof options["baseURL"] === "string") {
+        const base = options["baseURL"].trim().replace(/\/+$/, "")
+        if (base && !base.endsWith("/v1")) {
+          options["baseURL"] = `${base}/v1`
+        }
+      }
+
       if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
       if (model.headers)
         options["headers"] = {
