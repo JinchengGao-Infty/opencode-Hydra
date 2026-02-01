@@ -18,6 +18,12 @@ export namespace HydraConfig {
     model: z.string().optional(),
     thinking: Thinking.optional(),
     prompt: z.string().optional(),
+    workflow: z.string().optional(),
+    systemPrompt: z.string().optional(),
+    tools: z.array(z.string()).optional(),
+    timeout: z.number().optional(),
+    retryOnFail: z.boolean().optional(),
+    maxRetries: z.number().optional(),
   })
   export type Class = z.infer<typeof Class>
 

@@ -7,6 +7,7 @@ import PROMPT_CODER from "./prompts/coder.txt"
 import PROMPT_ARCHITECT from "./prompts/architect.txt"
 import PROMPT_WRITER from "./prompts/writer.txt"
 import PROMPT_REVIEWER from "./prompts/reviewer.txt"
+import PROMPT_CODEX from "./prompts/codex.txt"
 
 export namespace AgentClass {
   export const Thinking = z.enum(["low", "medium", "high"])
@@ -18,6 +19,12 @@ export namespace AgentClass {
     prompt: z.string(),
     defaultModel: z.string(),
     defaultThinking: Thinking,
+    workflow: z.string().optional(),
+    systemPrompt: z.string().optional(),
+    tools: z.array(z.string()).optional(),
+    timeout: z.number().optional(),
+    retryOnFail: z.boolean().optional(),
+    maxRetries: z.number().optional(),
   })
   export type Info = z.infer<typeof Info>
 
@@ -28,6 +35,22 @@ export namespace AgentClass {
       prompt: PROMPT_CODER,
       defaultModel: "anthropic/claude-sonnet",
       defaultThinking: "medium",
+    },
+    Codex: {
+      name: "Codex",
+      description: "深度思考的编程 Agent，质量优先，擅长复杂修改与自测自查",
+      prompt: PROMPT_CODEX,
+      defaultModel: "openai/codex",
+      defaultThinking: "high",
+      timeout: 7200,
+      workflow: [
+        "1. 阅读任务文档（tasks/tXXX.md）",
+        "2. 分析现有代码结构",
+        "3. 制定实现计划",
+        "4. 逐步实现，边做边测试",
+        "5. 完成后自我审查",
+        "6. 不要提交 git（由主控处理）",
+      ].join("\n"),
     },
     Architect: {
       name: "Architect",
@@ -71,6 +94,12 @@ export namespace AgentClass {
           prompt,
           defaultModel: cfg.model ?? base.defaultModel,
           defaultThinking: cfg.thinking ?? base.defaultThinking,
+          workflow: cfg.workflow ?? base.workflow,
+          systemPrompt: cfg.systemPrompt ?? base.systemPrompt,
+          tools: cfg.tools ?? base.tools,
+          timeout: cfg.timeout ?? base.timeout,
+          retryOnFail: cfg.retryOnFail ?? base.retryOnFail,
+          maxRetries: cfg.maxRetries ?? base.maxRetries,
         })
         continue
       }
@@ -81,6 +110,12 @@ export namespace AgentClass {
         prompt: cfg.prompt ?? base?.prompt ?? "",
         defaultModel: cfg.model ?? base?.defaultModel ?? defs.model,
         defaultThinking: cfg.thinking ?? base?.defaultThinking ?? defs.thinking,
+        workflow: cfg.workflow ?? base?.workflow,
+        systemPrompt: cfg.systemPrompt ?? base?.systemPrompt,
+        tools: cfg.tools ?? base?.tools,
+        timeout: cfg.timeout ?? base?.timeout,
+        retryOnFail: cfg.retryOnFail ?? base?.retryOnFail,
+        maxRetries: cfg.maxRetries ?? base?.maxRetries,
       })
     }
 
